@@ -1,11 +1,11 @@
-package mcpserver
+package server
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	mcpgo "github.com/mark3labs/mcp-go/server"
 
 	imagegen "github.com/oxkrypton/PixelsMcp/internal/service/imagegen"
 )
@@ -14,8 +14,8 @@ type GenerateImageArgs struct {
 	Prompt string `json:"prompt" jsonschema:"Text prompt used to generate the image"`
 }
 
-func New(name, version string, imageService *imagegen.Service) *server.MCPServer {
-	srv := server.NewMCPServer(name, version, server.WithToolCapabilities(false))
+func New(name, version string, imageService *imagegen.Service) *mcpgo.MCPServer {
+	srv := mcpgo.NewMCPServer(name, version, mcpgo.WithToolCapabilities(false))
 
 	handler := &generateImageToolHandler{
 		service: imageService,
