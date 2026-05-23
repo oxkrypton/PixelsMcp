@@ -1,2 +1,5 @@
 /PixelsMcp
 /pixelsmcp
+.env
+.env.local
+.mcp.json
