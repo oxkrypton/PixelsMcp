@@ -23,6 +23,15 @@ func TestConfigFromEnvDefaultsToStdio(t *testing.T) {
 	if cfg.healthEndpoint != defaultHealthEndpoint {
 		t.Fatalf("healthEndpoint = %q, want %q", cfg.healthEndpoint, defaultHealthEndpoint)
 	}
+	if cfg.baseURL != defaultBaseURL {
+		t.Fatalf("baseURL = %q, want %q", cfg.baseURL, defaultBaseURL)
+	}
+	if cfg.imageModel != defaultImageModel {
+		t.Fatalf("imageModel = %q, want %q", cfg.imageModel, defaultImageModel)
+	}
+	if cfg.imageSaveDir != defaultImageSaveDir {
+		t.Fatalf("imageSaveDir = %q, want %q", cfg.imageSaveDir, defaultImageSaveDir)
+	}
 }
 
 func TestConfigFromEnvHTTP(t *testing.T) {
@@ -32,6 +41,10 @@ func TestConfigFromEnvHTTP(t *testing.T) {
 		"PIXELSMCP_ENDPOINT":        "api/mcp/",
 		"PIXELSMCP_HEALTH_ENDPOINT": "ready",
 		"PIXELSMCP_CORS_ORIGINS":    "https://example.com, https://app.example.com ",
+		"PIXELSMCP_API_KEY":         "test-key",
+		"PIXELSMCP_BASE_URL":        "https://example.invalid",
+		"PIXELSMCP_IMAGE_MODEL":     "Custom/Model",
+		"PIXELSMCP_IMAGE_SAVE_DIR":  "/tmp/pixelsmcp",
 	}
 
 	cfg, err := configFromEnv(func(key string) string { return env[key] })
@@ -50,6 +63,18 @@ func TestConfigFromEnvHTTP(t *testing.T) {
 	}
 	if cfg.healthEndpoint != "/ready" {
 		t.Fatalf("healthEndpoint = %q, want /ready", cfg.healthEndpoint)
+	}
+	if cfg.apiKey != "test-key" {
+		t.Fatalf("apiKey = %q, want test-key", cfg.apiKey)
+	}
+	if cfg.baseURL != "https://example.invalid" {
+		t.Fatalf("baseURL = %q, want https://example.invalid", cfg.baseURL)
+	}
+	if cfg.imageModel != "Custom/Model" {
+		t.Fatalf("imageModel = %q, want Custom/Model", cfg.imageModel)
+	}
+	if cfg.imageSaveDir != "/tmp/pixelsmcp" {
+		t.Fatalf("imageSaveDir = %q, want /tmp/pixelsmcp", cfg.imageSaveDir)
 	}
 	wantOrigins := []string{"https://example.com", "https://app.example.com"}
 	if !reflect.DeepEqual(cfg.corsOrigins, wantOrigins) {
@@ -80,3 +105,4 @@ func TestConfigFromEnvRejectsSharedEndpoints(t *testing.T) {
 		t.Fatal("configFromEnv returned nil error")
 	}
 }
+

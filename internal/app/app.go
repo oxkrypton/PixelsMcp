@@ -12,9 +12,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/oxkrypton/PixelsMcp/internal/service/echo"
+	imagegen "github.com/oxkrypton/PixelsMcp/internal/service/imagegen"
 	"github.com/oxkrypton/PixelsMcp/internal/transport/mcpserver"
 )
 
@@ -24,13 +25,26 @@ const (
 )
 
 func Run() error {
+	_ = godotenv.Load(".env.local", ".env")
+
 	cfg, err := configFromEnv(os.Getenv)
 	if err != nil {
 		return err
 	}
+	if cfg.apiKey == "" {
+		return errors.New("PIXELSMCP_API_KEY is required")
+	}
+	if cfg.baseURL == "" {
+		return errors.New("PIXELSMCP_BASE_URL is required")
+	}
 
-	echoService := echo.NewService()
-	mcpServer := mcpserver.New(serverName, serverVersion, echoService)
+	imageService := imagegen.NewService(imagegen.Config{
+		APIKey:  cfg.apiKey,
+		BaseURL: cfg.baseURL,
+		Model:   cfg.imageModel,
+		SaveDir: cfg.imageSaveDir,
+	})
+	mcpServer := mcpserver.New(serverName, serverVersion, imageService)
 
 	switch cfg.transport {
 	case transportStdio:
@@ -51,6 +65,9 @@ const (
 	defaultHTTPAddr       = ":8080"
 	defaultMCPEndpoint    = "/mcp"
 	defaultHealthEndpoint = "/healthz"
+	defaultImageSaveDir   = "./generated-images"
+	defaultImageModel     = "Kwai-Kolors/Kolors"
+	defaultBaseURL        = ""
 	shutdownTimeout       = 10 * time.Second
 )
 
@@ -60,6 +77,10 @@ type config struct {
 	mcpEndpoint    string
 	healthEndpoint string
 	corsOrigins    []string
+	apiKey         string
+	baseURL        string
+	imageModel     string
+	imageSaveDir   string
 }
 
 func configFromEnv(getenv func(string) string) (config, error) {
@@ -68,6 +89,9 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		addr:           defaultHTTPAddr,
 		mcpEndpoint:    defaultMCPEndpoint,
 		healthEndpoint: defaultHealthEndpoint,
+		baseURL:        defaultBaseURL,
+		imageModel:     defaultImageModel,
+		imageSaveDir:   defaultImageSaveDir,
 	}
 
 	if value := strings.TrimSpace(getenv("PIXELSMCP_TRANSPORT")); value != "" {
@@ -88,6 +112,16 @@ func configFromEnv(getenv func(string) string) (config, error) {
 				cfg.corsOrigins = append(cfg.corsOrigins, origin)
 			}
 		}
+	}
+	cfg.apiKey = strings.TrimSpace(getenv("PIXELSMCP_API_KEY"))
+	if value := strings.TrimSpace(getenv("PIXELSMCP_BASE_URL")); value != "" {
+		cfg.baseURL = value
+	}
+	if value := strings.TrimSpace(getenv("PIXELSMCP_IMAGE_MODEL")); value != "" {
+		cfg.imageModel = value
+	}
+	if value := strings.TrimSpace(getenv("PIXELSMCP_IMAGE_SAVE_DIR")); value != "" {
+		cfg.imageSaveDir = value
 	}
 
 	switch cfg.transport {
