@@ -7,42 +7,42 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	echosvc "github.com/oxkrypton/PixelsMcp/internal/service/echo"
+	imagegen "github.com/oxkrypton/PixelsMcp/internal/service/imagegen"
 )
 
-type EchoArgs struct {
-	Message string `json:"message" jsonschema:"Message to echo back"`
+type GenerateImageArgs struct {
+	Prompt string `json:"prompt" jsonschema:"Text prompt used to generate the image"`
 }
 
-func New(name, version string, echoService *echosvc.Service) *server.MCPServer {
+func New(name, version string, imageService *imagegen.Service) *server.MCPServer {
 	srv := server.NewMCPServer(name, version, server.WithToolCapabilities(false))
 
-	handler := &echoToolHandler{
-		service: echoService,
+	handler := &generateImageToolHandler{
+		service: imageService,
 	}
 
-	srv.AddTool(newEchoTool(), mcp.NewTypedToolHandler(handler.handle))
+	srv.AddTool(newGenerateImageTool(), mcp.NewTypedToolHandler(handler.handle))
 
 	return srv
 }
 
-type echoToolHandler struct {
-	service *echosvc.Service
+type generateImageToolHandler struct {
+	service *imagegen.Service
 }
 
-func (h *echoToolHandler) handle(ctx context.Context, _ mcp.CallToolRequest, args EchoArgs) (*mcp.CallToolResult, error) {
-	echoed, err := h.service.Echo(ctx, args.Message)
+func (h *generateImageToolHandler) handle(ctx context.Context, _ mcp.CallToolRequest, args GenerateImageArgs) (*mcp.CallToolResult, error) {
+	result, err := h.service.Generate(ctx, args.Prompt)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("echo failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Sprintf("image generation failed: %v", err)), nil
 	}
 
-	return mcp.NewToolResultText(echoed), nil
+	return mcp.NewToolResultStructuredOnly(result), nil
 }
 
-func newEchoTool() mcp.Tool {
+func newGenerateImageTool() mcp.Tool {
 	return mcp.NewTool(
-		"echo",
-		mcp.WithDescription("Return the provided message unchanged"),
-		mcp.WithInputSchema[EchoArgs](),
+		"generate_image",
+		mcp.WithDescription("Generate an image from a prompt, save it locally, and return the file information"),
+		mcp.WithInputSchema[GenerateImageArgs](),
 	)
 }
