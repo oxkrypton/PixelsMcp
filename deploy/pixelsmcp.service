@@ -1,0 +1,25 @@
+[Unit]
+Description=PixelsMcp MCP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pixelsmcp
+Group=pixelsmcp
+WorkingDirectory=/opt/pixelsmcp
+ExecStart=/opt/pixelsmcp/pixelsmcp
+Restart=always
+RestartSec=5
+Environment=PIXELSMCP_TRANSPORT=http
+Environment=PIXELSMCP_ADDR=127.0.0.1:8080
+Environment=PIXELSMCP_ENDPOINT=/mcp
+Environment=PIXELSMCP_HEALTH_ENDPOINT=/healthz
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
