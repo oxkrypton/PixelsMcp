@@ -82,7 +82,9 @@ func writeUsage(out io.Writer) {
 	_, _ = fmt.Fprintln(out, "PixelsMcp")
 	_, _ = fmt.Fprintln(out, "")
 	_, _ = fmt.Fprintln(out, "Usage:")
-	_, _ = fmt.Fprintln(out, "  pixelsmcp           Run the MCP server")
-	_, _ = fmt.Fprintln(out, "  pixelsmcp init      Create or update .env.local")
+	_, _ = fmt.Fprintln(out, "  pixelsmcp           Run the HTTP MCP service")
+	_, _ = fmt.Fprintln(out, "  pixelsmcp init      Create or update developer .env.local")
 	_, _ = fmt.Fprintln(out, "  pixelsmcp setup     Alias for init")
+	_, _ = fmt.Fprintln(out, "")
+	_, _ = fmt.Fprintln(out, "Set PIXELSMCP_TRANSPORT=stdio only for local developer MCP debugging.")
 }

@@ -37,7 +37,7 @@ type config struct {
 
 func configFromEnv(getenv func(string) string) (config, error) {
 	cfg := config{
-		transport:      transportStdio,
+		transport:      transportHTTP,
 		addr:           defaultHTTPAddr,
 		mcpEndpoint:    defaultMCPEndpoint,
 		healthEndpoint: defaultHealthEndpoint,
