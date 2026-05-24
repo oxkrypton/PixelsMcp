@@ -3,3 +3,4 @@
 .env
 .env.local
 /generated-images
+.mcp.json

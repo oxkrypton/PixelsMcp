@@ -27,10 +27,12 @@ type openAICompatibleProvider struct {
 type openAICompatibleGenerationRequest struct {
 	Model             string  `json:"model"`
 	Prompt            string  `json:"prompt"`
+	NegativePrompt    string  `json:"negative_prompt,omitempty"`
 	ImageSize         string  `json:"image_size,omitempty"`
 	BatchSize         int     `json:"batch_size,omitempty"`
 	NumInferenceSteps int     `json:"num_inference_steps,omitempty"`
 	GuidanceScale     float64 `json:"guidance_scale,omitempty"`
+	Seed              *int64  `json:"seed,omitempty"`
 }
 
 type openAICompatibleGenerationResponse struct {
@@ -88,9 +90,11 @@ func (p *openAICompatibleProvider) Generate(ctx context.Context, prompt string, 
 	reqBody := openAICompatibleGenerationRequest{
 		Model:             p.model,
 		Prompt:            prompt,
+		NegativePrompt:    strings.TrimSpace(opts.NegativePrompt),
 		ImageSize:         strings.TrimSpace(opts.ImageSize),
 		NumInferenceSteps: opts.NumInferenceSteps,
 		GuidanceScale:     opts.GuidanceScale,
+		Seed:              opts.Seed,
 	}
 
 	rawReq, err := json.Marshal(reqBody)
@@ -128,10 +132,15 @@ func (p *openAICompatibleProvider) Generate(ctx context.Context, prompt string, 
 		model = p.model
 	}
 
+	seed := genResp.Seed
+	if seed == 0 && opts.Seed != nil {
+		seed = *opts.Seed
+	}
+
 	return &GenerationResult{
 		Model:       model,
 		ImageURL:    imageURL,
-		Seed:        genResp.Seed,
+		Seed:        seed,
 		InferenceMS: genResp.Timings.Inference,
 		TraceID:     firstHeaderValue(resp.Header, "X-Trace-Id", "X-Request-Id", "X-Provider-Trace-Id"),
 	}, nil

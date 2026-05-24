@@ -73,6 +73,8 @@ func TestOpenAICompatibleProviderGenerate(t *testing.T) {
 		ImageSize:         "1024x1024",
 		GuidanceScale:     7.25,
 		NumInferenceSteps: 32,
+		Seed:              int64Ptr(42),
+		NegativePrompt:    " blurry, low quality ",
 	})
 	if err != nil {
 		t.Fatalf("Generate returned error: %v", err)
@@ -84,6 +86,9 @@ func TestOpenAICompatibleProviderGenerate(t *testing.T) {
 	if got, ok := captured["prompt"].(string); !ok || got != "a blue robot" {
 		t.Fatalf("prompt = %#v, want a blue robot", captured["prompt"])
 	}
+	if got, ok := captured["negative_prompt"].(string); !ok || got != "blurry, low quality" {
+		t.Fatalf("negative_prompt = %#v, want trimmed negative prompt", captured["negative_prompt"])
+	}
 	if got, ok := captured["image_size"].(string); !ok || got != "1024x1024" {
 		t.Fatalf("image_size = %#v, want 1024x1024", captured["image_size"])
 	}
@@ -92,6 +97,9 @@ func TestOpenAICompatibleProviderGenerate(t *testing.T) {
 	}
 	if got, ok := captured["num_inference_steps"].(float64); !ok || got != 32 {
 		t.Fatalf("num_inference_steps = %#v, want 32", captured["num_inference_steps"])
+	}
+	if got, ok := captured["seed"].(float64); !ok || got != 42 {
+		t.Fatalf("seed = %#v, want 42", captured["seed"])
 	}
 	if _, ok := captured["batch_size"]; ok {
 		t.Fatalf("batch_size = %#v, want omitted", captured["batch_size"])
@@ -143,11 +151,15 @@ func TestOpenAICompatibleProviderGenerateOmitsUnsetOptions(t *testing.T) {
 		t.Fatalf("Generate returned error: %v", err)
 	}
 
-	for _, key := range []string{"image_size", "guidance_scale", "num_inference_steps", "batch_size"} {
+	for _, key := range []string{"image_size", "guidance_scale", "num_inference_steps", "seed", "negative_prompt", "batch_size"} {
 		if _, ok := captured[key]; ok {
 			t.Fatalf("%s = %#v, want omitted", key, captured[key])
 		}
 	}
+}
+
+func int64Ptr(value int64) *int64 {
+	return &value
 }
 
 func TestOpenAICompatibleProviderListModelsAndValidate(t *testing.T) {

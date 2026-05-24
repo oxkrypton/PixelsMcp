@@ -124,6 +124,8 @@ func TestGenerateWithOptionsBuildsBackgroundColorPrompt(t *testing.T) {
 
 	result, err := svc.GenerateWithOptions(context.Background(), "a robot in a garden", GenerationOptions{
 		BackgroundColor: "  #ff00ff  ",
+		Seed:            int64Ptr(777),
+		NegativePrompt:  " blurry, shadows ",
 	})
 	if err != nil {
 		t.Fatalf("GenerateWithOptions returned error: %v", err)
@@ -139,6 +141,12 @@ func TestGenerateWithOptionsBuildsBackgroundColorPrompt(t *testing.T) {
 	}
 	if result.Prompt != gotRequest.Prompt {
 		t.Fatalf("result prompt = %q, want generated prompt", result.Prompt)
+	}
+	if gotRequest.Seed == nil || *gotRequest.Seed != 777 {
+		t.Fatalf("seed = %#v, want 777", gotRequest.Seed)
+	}
+	if gotRequest.NegativePrompt != "blurry, shadows" {
+		t.Fatalf("negativePrompt = %q, want trimmed negative prompt", gotRequest.NegativePrompt)
 	}
 }
 

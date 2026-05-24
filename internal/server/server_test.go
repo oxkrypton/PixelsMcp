@@ -1,8 +1,11 @@
 package server
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
+
+	"github.com/mark3labs/mcp-go/mcp"
 
 	imagegen "github.com/oxkrypton/PixelsMcp/internal/service/imagegen"
 )
@@ -27,6 +30,57 @@ func TestMCPServerRegistersImageAndSpriteSheetTools(t *testing.T) {
 	}
 	if _, ok := tools["generate_sprite_sheet"]; !ok {
 		t.Fatalf("generate_sprite_sheet tool not registered: %#v", tools)
+	}
+}
+
+func TestToolSchemasExposeCommonGenerationFields(t *testing.T) {
+	imageSchema := rawToolSchema(t, newGenerateImageTool())
+	assertSchemaProperties(t, imageSchema, []string{
+		"prompt",
+		"background_color",
+		"image_size",
+		"guidance_scale",
+		"num_inference_steps",
+		"seed",
+		"negative_prompt",
+	})
+
+	spriteSchema := rawToolSchema(t, newGenerateSpriteSheetTool())
+	assertSchemaProperties(t, spriteSchema, []string{
+		"prompt",
+		"action",
+		"frame_count",
+		"layout",
+		"background_color",
+		"image_size",
+		"guidance_scale",
+		"num_inference_steps",
+		"seed",
+		"negative_prompt",
+	})
+}
+
+func rawToolSchema(t *testing.T, tool mcp.Tool) map[string]any {
+	t.Helper()
+
+	var schema map[string]any
+	if err := json.Unmarshal(tool.RawInputSchema, &schema); err != nil {
+		t.Fatalf("unmarshal raw input schema: %v", err)
+	}
+	return schema
+}
+
+func assertSchemaProperties(t *testing.T, schema map[string]any, names []string) {
+	t.Helper()
+
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema properties = %#v, want object", schema["properties"])
+	}
+	for _, name := range names {
+		if _, ok := properties[name]; !ok {
+			t.Fatalf("schema missing property %q: %#v", name, properties)
+		}
 	}
 }
 

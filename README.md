@@ -120,8 +120,8 @@ curl http://127.0.0.1:8080/healthz
 
 ## Tools
 
-- `generate_image`: generates an image from `prompt` and optional `background_color`, saves it on the server, and returns the file information.
-- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, optional `background_color`, and optional tuning args, saves it on the server, and returns the file information.
+- `generate_image`: generates an image from `prompt`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
+- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
 
 Use `background_color` for a solid key color like `#00FF00` or `#FF00FF`.
 If you omit it on sprite sheets, the existing light-gray background stays in place.
@@ -131,7 +131,12 @@ Example image arguments:
 ```json
 {
   "prompt": "portrait of a cyberpunk engineer",
-  "background_color": "#FF00FF"
+  "background_color": "#FF00FF",
+  "image_size": "1024x1024",
+  "guidance_scale": 7.5,
+  "num_inference_steps": 28,
+  "seed": 12345,
+  "negative_prompt": "blurry, low quality"
 }
 ```
 
@@ -146,11 +151,13 @@ Example sprite sheet arguments:
   "background_color": "#00FF00",
   "image_size": "1024x1024",
   "guidance_scale": 7.5,
-  "num_inference_steps": 28
+  "num_inference_steps": 28,
+  "seed": 12345,
+  "negative_prompt": "extra limbs, realistic 3D, gradient background"
 }
 ```
 
 Supported layout prompts include `horizontal`, `vertical`, and `3x3`. Other
 layout text is passed through to the image model instead of being blocked by
-the MCP server. Optional tuning fields are forwarded to compatible image
-providers when supplied.
+the MCP server. Optional tuning fields, `seed`, and `negative_prompt` are
+forwarded to compatible image providers when supplied.

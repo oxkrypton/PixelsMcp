@@ -30,6 +30,8 @@ type GenerationOptions struct {
 	ImageSize         string
 	GuidanceScale     float64
 	NumInferenceSteps int
+	Seed              *int64
+	NegativePrompt    string
 	BackgroundColor   string
 }
 

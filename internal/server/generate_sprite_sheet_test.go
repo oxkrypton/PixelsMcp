@@ -59,6 +59,8 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 				"image_size":          "1024x1024",
 				"guidance_scale":      6.5,
 				"num_inference_steps": 30,
+				"seed":                9876,
+				"negative_prompt":     "extra limbs, realistic 3D",
 			},
 		},
 	})
@@ -118,5 +120,11 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 	}
 	if got, ok := capturedBody["num_inference_steps"].(float64); !ok || got != 30 {
 		t.Fatalf("num_inference_steps = %#v, want 30", capturedBody["num_inference_steps"])
+	}
+	if got, ok := capturedBody["seed"].(float64); !ok || got != 9876 {
+		t.Fatalf("seed = %#v, want 9876", capturedBody["seed"])
+	}
+	if got, ok := capturedBody["negative_prompt"].(string); !ok || got != "extra limbs, realistic 3D" {
+		t.Fatalf("negative_prompt = %#v, want negative prompt", capturedBody["negative_prompt"])
 	}
 }

@@ -83,8 +83,13 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 		Params: mcp.CallToolParams{
 			Name: "generate_image",
 			Arguments: map[string]any{
-				"prompt":           "a white cat sitting on a window",
-				"background_color": "#ff00ff",
+				"prompt":              "a white cat sitting on a window",
+				"background_color":    "#ff00ff",
+				"image_size":          "1024x1024",
+				"guidance_scale":      6.75,
+				"num_inference_steps": 24,
+				"seed":                1234,
+				"negative_prompt":     "blurry, gradient background",
 			},
 		},
 	})
@@ -140,6 +145,21 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 	}
 	if capturedBody["model"] != "Custom/Model" {
 		t.Fatalf("generation model = %#v, want Custom/Model", capturedBody["model"])
+	}
+	if got, ok := capturedBody["image_size"].(string); !ok || got != "1024x1024" {
+		t.Fatalf("image_size = %#v, want 1024x1024", capturedBody["image_size"])
+	}
+	if got, ok := capturedBody["guidance_scale"].(float64); !ok || got != 6.75 {
+		t.Fatalf("guidance_scale = %#v, want 6.75", capturedBody["guidance_scale"])
+	}
+	if got, ok := capturedBody["num_inference_steps"].(float64); !ok || got != 24 {
+		t.Fatalf("num_inference_steps = %#v, want 24", capturedBody["num_inference_steps"])
+	}
+	if got, ok := capturedBody["seed"].(float64); !ok || got != 1234 {
+		t.Fatalf("seed = %#v, want 1234", capturedBody["seed"])
+	}
+	if got, ok := capturedBody["negative_prompt"].(string); !ok || got != "blurry, gradient background" {
+		t.Fatalf("negative_prompt = %#v, want negative prompt", capturedBody["negative_prompt"])
 	}
 	if filepath.Dir(parsed.LocalPath) != saveDir {
 		t.Fatalf("local path = %q, want file under %q", parsed.LocalPath, saveDir)
