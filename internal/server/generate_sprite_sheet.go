@@ -23,6 +23,7 @@ type GenerateSpriteSheetArgs struct {
 	NumInferenceSteps int     `json:"num_inference_steps,omitempty" jsonschema:"Optional number of inference steps to request"`
 	Seed              *int64  `json:"seed,omitempty" jsonschema:"Optional generation seed for reproducible outputs"`
 	NegativePrompt    string  `json:"negative_prompt,omitempty" jsonschema:"Optional text describing what to avoid in the generated image"`
+	ReferenceImage    string  `json:"reference_image,omitempty" jsonschema:"Optional reference image as an http(s) URL or data:image base64 URL"`
 }
 
 type generateSpriteSheetToolHandler struct {
@@ -45,6 +46,7 @@ func (h *generateSpriteSheetToolHandler) handle(ctx context.Context, _ mcp.CallT
 			NumInferenceSteps: args.NumInferenceSteps,
 			Seed:              args.Seed,
 			NegativePrompt:    args.NegativePrompt,
+			ReferenceImage:    args.ReferenceImage,
 		},
 	})
 	if err != nil {
@@ -57,7 +59,7 @@ func (h *generateSpriteSheetToolHandler) handle(ctx context.Context, _ mcp.CallT
 func newGenerateSpriteSheetTool() mcp.Tool {
 	return mcp.NewTool(
 		"generate_sprite_sheet",
-		mcp.WithDescription("Generate a sprite sheet image from a prompt, action, frame count, layout, optional frame geometry, optional solid background color, optional tuning args, seed, and negative prompt, save it locally, and return the file information"),
+		mcp.WithDescription("Generate a sprite sheet image from a prompt, action, frame count, layout, optional reference image, optional frame geometry, optional solid background color, optional tuning args, seed, and negative prompt, save it locally, and return the file information"),
 		mcp.WithInputSchema[GenerateSpriteSheetArgs](),
 	)
 }
