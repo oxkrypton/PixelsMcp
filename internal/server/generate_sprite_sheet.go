@@ -14,6 +14,7 @@ type GenerateSpriteSheetArgs struct {
 	Action            string  `json:"action" jsonschema:"Animation action or motion to generate, such as idle, walk, attack, jump, or cast"`
 	FrameCount        int     `json:"frame_count" jsonschema:"Number of animation frames to request in the sprite sheet"`
 	Layout            string  `json:"layout,omitempty" jsonschema:"Sprite sheet layout, such as horizontal, vertical, or 3x3"`
+	BackgroundColor   string  `json:"background_color,omitempty" jsonschema:"Optional solid background color in #RRGGBB format, such as #00FF00 or #FF00FF"`
 	ImageSize         string  `json:"image_size,omitempty" jsonschema:"Optional output image size, such as 1024x1024"`
 	GuidanceScale     float64 `json:"guidance_scale,omitempty" jsonschema:"Optional prompt adherence strength"`
 	NumInferenceSteps int     `json:"num_inference_steps,omitempty" jsonschema:"Optional number of inference steps to request"`
@@ -30,6 +31,7 @@ func (h *generateSpriteSheetToolHandler) handle(ctx context.Context, _ mcp.CallT
 		FrameCount: args.FrameCount,
 		Layout:     args.Layout,
 		Generation: imagegen.GenerationOptions{
+			BackgroundColor:   args.BackgroundColor,
 			ImageSize:         args.ImageSize,
 			GuidanceScale:     args.GuidanceScale,
 			NumInferenceSteps: args.NumInferenceSteps,
@@ -45,7 +47,7 @@ func (h *generateSpriteSheetToolHandler) handle(ctx context.Context, _ mcp.CallT
 func newGenerateSpriteSheetTool() mcp.Tool {
 	return mcp.NewTool(
 		"generate_sprite_sheet",
-		mcp.WithDescription("Generate a sprite sheet image from a prompt, action, frame count, layout, and optional tuning args, save it locally, and return the file information"),
+		mcp.WithDescription("Generate a sprite sheet image from a prompt, action, frame count, layout, optional solid background color, and optional tuning args, save it locally, and return the file information"),
 		mcp.WithInputSchema[GenerateSpriteSheetArgs](),
 	)
 }
