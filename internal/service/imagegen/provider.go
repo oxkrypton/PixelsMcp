@@ -12,18 +12,20 @@ const (
 	ProviderOpenAICompatible = "openai-compatible"
 	DefaultProvider          = ProviderOpenAICompatible
 	DefaultModel             = "Kwai-Kolors/Kolors"
+	DefaultReferenceModel    = "Qwen/Qwen-Image-Edit-2509"
 	DefaultSaveDir           = "./generated-images"
 	DefaultRequestTimeout    = 2 * time.Minute
 )
 
 type ProviderConfig struct {
-	Provider     string
-	APIKey       string
-	BaseURL      string
-	Model        string
-	ExtraHeaders map[string]string
-	Timeout      time.Duration
-	Client       *http.Client
+	Provider       string
+	APIKey         string
+	BaseURL        string
+	Model          string
+	ReferenceModel string
+	ExtraHeaders   map[string]string
+	Timeout        time.Duration
+	Client         *http.Client
 }
 
 type GenerationOptions struct {
@@ -33,6 +35,7 @@ type GenerationOptions struct {
 	Seed              *int64
 	NegativePrompt    string
 	BackgroundColor   string
+	ReferenceImage    string
 }
 
 type Provider interface {
@@ -43,11 +46,12 @@ type Provider interface {
 }
 
 type GenerationResult struct {
-	Model       string
-	ImageURL    string
-	Seed        int64
-	InferenceMS float64
-	TraceID     string
+	Model              string
+	ImageURL           string
+	Seed               int64
+	InferenceMS        float64
+	TraceID            string
+	UsedReferenceImage bool
 }
 
 func NewProvider(cfg ProviderConfig) (Provider, error) {

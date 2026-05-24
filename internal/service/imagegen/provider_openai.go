@@ -17,11 +17,12 @@ const (
 )
 
 type openAICompatibleProvider struct {
-	apiKey       string
-	baseURL      string
-	model        string
-	extraHeaders map[string]string
-	client       *http.Client
+	apiKey         string
+	baseURL        string
+	model          string
+	referenceModel string
+	extraHeaders   map[string]string
+	client         *http.Client
 }
 
 type openAICompatibleGenerationRequest struct {
@@ -29,6 +30,7 @@ type openAICompatibleGenerationRequest struct {
 	Prompt            string  `json:"prompt"`
 	NegativePrompt    string  `json:"negative_prompt,omitempty"`
 	ImageSize         string  `json:"image_size,omitempty"`
+	Image             string  `json:"image,omitempty"`
 	BatchSize         int     `json:"batch_size,omitempty"`
 	NumInferenceSteps int     `json:"num_inference_steps,omitempty"`
 	GuidanceScale     float64 `json:"guidance_scale,omitempty"`
@@ -69,11 +71,12 @@ func newOpenAICompatibleProvider(cfg ProviderConfig) (*openAICompatibleProvider,
 	}
 
 	return &openAICompatibleProvider{
-		apiKey:       apiKey,
-		baseURL:      baseURL,
-		model:        model,
-		extraHeaders: cloneStringMap(cfg.ExtraHeaders),
-		client:       newHTTPClient(cfg.Client, cfg.Timeout),
+		apiKey:         apiKey,
+		baseURL:        baseURL,
+		model:          model,
+		referenceModel: strings.TrimSpace(cfg.ReferenceModel),
+		extraHeaders:   cloneStringMap(cfg.ExtraHeaders),
+		client:         newHTTPClient(cfg.Client, cfg.Timeout),
 	}, nil
 }
 
@@ -87,14 +90,32 @@ func (p *openAICompatibleProvider) Generate(ctx context.Context, prompt string, 
 		return nil, errors.New("prompt is required")
 	}
 
+	model := p.model
+	referenceImage := strings.TrimSpace(opts.ReferenceImage)
+	usedReferenceImage := referenceImage != ""
+	if usedReferenceImage {
+		if strings.TrimSpace(p.referenceModel) == "" {
+			return nil, errors.New("reference image model is required when reference_image is provided")
+		}
+		if !isSupportedReferenceImage(referenceImage) {
+			return nil, errors.New("reference_image must be an http(s) URL or data:image base64 URL")
+		}
+		model = strings.TrimSpace(p.referenceModel)
+	}
+
 	reqBody := openAICompatibleGenerationRequest{
-		Model:             p.model,
+		Model:             model,
 		Prompt:            prompt,
 		NegativePrompt:    strings.TrimSpace(opts.NegativePrompt),
 		ImageSize:         strings.TrimSpace(opts.ImageSize),
 		NumInferenceSteps: opts.NumInferenceSteps,
 		GuidanceScale:     opts.GuidanceScale,
 		Seed:              opts.Seed,
+	}
+	if usedReferenceImage {
+		reqBody.Image = referenceImage
+		reqBody.ImageSize = ""
+		reqBody.GuidanceScale = 0
 	}
 
 	rawReq, err := json.Marshal(reqBody)
@@ -127,9 +148,9 @@ func (p *openAICompatibleProvider) Generate(ctx context.Context, prompt string, 
 	}
 
 	imageURL := strings.TrimSpace(genResp.Images[0].URL)
-	model := strings.TrimSpace(genResp.Model)
-	if model == "" {
-		model = p.model
+	resultModel := strings.TrimSpace(genResp.Model)
+	if resultModel == "" {
+		resultModel = model
 	}
 
 	seed := genResp.Seed
@@ -138,11 +159,12 @@ func (p *openAICompatibleProvider) Generate(ctx context.Context, prompt string, 
 	}
 
 	return &GenerationResult{
-		Model:       model,
-		ImageURL:    imageURL,
-		Seed:        seed,
-		InferenceMS: genResp.Timings.Inference,
-		TraceID:     firstHeaderValue(resp.Header, "X-Trace-Id", "X-Request-Id", "X-Provider-Trace-Id"),
+		Model:              resultModel,
+		ImageURL:           imageURL,
+		Seed:               seed,
+		InferenceMS:        genResp.Timings.Inference,
+		TraceID:            firstHeaderValue(resp.Header, "X-Siliconcloud-Trace-Id", "X-Trace-Id", "X-Request-Id", "X-Provider-Trace-Id"),
+		UsedReferenceImage: usedReferenceImage,
 	}, nil
 }
 
@@ -206,6 +228,13 @@ func containsModel(models []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func isSupportedReferenceImage(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(value, "http://") ||
+		strings.HasPrefix(value, "https://") ||
+		strings.HasPrefix(value, "data:image/")
 }
 
 func (p *openAICompatibleProvider) applyHeaders(req *http.Request) {
