@@ -120,8 +120,20 @@ curl http://127.0.0.1:8080/healthz
 
 ## Tools
 
-- `generate_image`: generates an image from `prompt`, saves it on the server, and returns the file information.
-- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, and optional tuning args, saves it on the server, and returns the file information.
+- `generate_image`: generates an image from `prompt` and optional `background_color`, saves it on the server, and returns the file information.
+- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, optional `background_color`, and optional tuning args, saves it on the server, and returns the file information.
+
+Use `background_color` for a solid key color like `#00FF00` or `#FF00FF`.
+If you omit it on sprite sheets, the existing light-gray background stays in place.
+
+Example image arguments:
+
+```json
+{
+  "prompt": "portrait of a cyberpunk engineer",
+  "background_color": "#FF00FF"
+}
+```
 
 Example sprite sheet arguments:
 
@@ -131,6 +143,7 @@ Example sprite sheet arguments:
   "action": "walk",
   "frame_count": 8,
   "layout": "horizontal",
+  "background_color": "#00FF00",
   "image_size": "1024x1024",
   "guidance_scale": 7.5,
   "num_inference_steps": 28
