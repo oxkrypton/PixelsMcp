@@ -49,6 +49,7 @@ type SpriteSheetOptions struct {
 	Action     string
 	FrameCount int
 	Layout     string
+	Generation GenerationOptions
 }
 
 type SpriteSheetResult struct {
@@ -91,7 +92,7 @@ func (s *Service) Generate(ctx context.Context, prompt string) (*Result, error) 
 		return nil, errors.New("prompt is required")
 	}
 
-	return s.generate(ctx, prompt, "")
+	return s.generate(ctx, prompt, "", GenerationOptions{})
 }
 
 func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptions) (*SpriteSheetResult, error) {
@@ -115,7 +116,7 @@ func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptio
 	}
 
 	generationPrompt := buildSpriteSheetPrompt(sourcePrompt, action, opts.FrameCount, layout)
-	result, err := s.generate(ctx, generationPrompt, "sprite-sheet")
+	result, err := s.generate(ctx, generationPrompt, "sprite-sheet", opts.Generation)
 	if err != nil {
 		return nil, err
 	}
@@ -129,8 +130,8 @@ func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptio
 	}, nil
 }
 
-func (s *Service) generate(ctx context.Context, prompt string, fileNamePrefix string) (*Result, error) {
-	generated, err := s.provider.Generate(ctx, prompt)
+func (s *Service) generate(ctx context.Context, prompt string, fileNamePrefix string, generation GenerationOptions) (*Result, error) {
+	generated, err := s.provider.Generate(ctx, prompt, generation)
 	if err != nil {
 		return nil, err
 	}
@@ -221,14 +222,17 @@ func buildSpriteSheetPrompt(sourcePrompt, action string, frameCount int, layout 
 
 	return fmt.Sprintf(`%s
 
-Create a single sprite sheet image for this animation.
+Create a single sprite sheet in a 16-bit pixel art style for this animation.
 Action: %s.
 Frame count: %d.
 Layout: %s.
 %s
+Each frame is exactly 64x64 pixels.
+Use pixel-perfect rendering with crisp edges, nearest-neighbor filtering, and a limited color palette.
 Keep the same character design, proportions, style, camera angle, lighting, and scale in every frame.
 Show clear incremental motion across frames.
-Use equal-sized cells and a clean or transparent background when appropriate.
+Leave 2px spacing between frames.
+Use a solid light-gray background.
 Do not add text labels, frame numbers, UI elements, watermarks, or decorative borders.`,
 		sourcePrompt,
 		action,
