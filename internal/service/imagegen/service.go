@@ -51,6 +51,21 @@ type Result struct {
 	DownloadedAt time.Time `json:"downloaded_at"`
 }
 
+type SpriteSheetOptions struct {
+	Prompt     string
+	Action     string
+	FrameCount int
+	Layout     string
+}
+
+type SpriteSheetResult struct {
+	Result
+	SourcePrompt string `json:"source_prompt"`
+	Action       string `json:"action"`
+	FrameCount   int    `json:"frame_count"`
+	Layout       string `json:"layout"`
+}
+
 type generationRequest struct {
 	Model             string  `json:"model"`
 	Prompt            string  `json:"prompt"`
@@ -102,6 +117,46 @@ func (s *Service) Generate(ctx context.Context, prompt string) (*Result, error) 
 	if prompt == "" {
 		return nil, errors.New("prompt is required")
 	}
+
+	return s.generate(ctx, prompt, "")
+}
+
+func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptions) (*SpriteSheetResult, error) {
+	sourcePrompt := strings.TrimSpace(opts.Prompt)
+	if sourcePrompt == "" {
+		return nil, errors.New("prompt is required")
+	}
+
+	action := strings.TrimSpace(opts.Action)
+	if action == "" {
+		return nil, errors.New("action is required")
+	}
+
+	if opts.FrameCount <= 0 {
+		return nil, errors.New("frame_count must be greater than 0")
+	}
+
+	layout := strings.TrimSpace(opts.Layout)
+	if layout == "" {
+		layout = "horizontal"
+	}
+
+	generationPrompt := buildSpriteSheetPrompt(sourcePrompt, action, opts.FrameCount, layout)
+	result, err := s.generate(ctx, generationPrompt, "sprite-sheet")
+	if err != nil {
+		return nil, err
+	}
+
+	return &SpriteSheetResult{
+		Result:       *result,
+		SourcePrompt: sourcePrompt,
+		Action:       action,
+		FrameCount:   opts.FrameCount,
+		Layout:       layout,
+	}, nil
+}
+
+func (s *Service) generate(ctx context.Context, prompt string, fileNamePrefix string) (*Result, error) {
 	if s.apiKey == "" {
 		return nil, errors.New("image generation api key is required")
 	}
@@ -159,7 +214,7 @@ func (s *Service) Generate(ctx context.Context, prompt string) (*Result, error) 
 		GeneratedAt: time.Now().UTC(),
 	}
 
-	localPath, contentType, bytesWritten, err := s.downloadImage(ctx, imageURL, result)
+	localPath, contentType, bytesWritten, err := s.downloadImage(ctx, imageURL, result, fileNamePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +226,7 @@ func (s *Service) Generate(ctx context.Context, prompt string) (*Result, error) 
 	return result, nil
 }
 
-func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Result) (string, string, int64, error) {
+func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Result, fileNamePrefix string) (string, string, int64, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("create image download request: %w", err)
@@ -204,7 +259,7 @@ func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Re
 		ext = ".png"
 	}
 
-	fileName := buildFileName(result.Model, result.Seed, ext)
+	fileName := buildFileName(fileNamePrefix, result.Model, result.Seed, ext)
 	filePath := filepath.Join(s.saveDir, fileName)
 
 	file, err := os.Create(filePath)
@@ -219,6 +274,41 @@ func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Re
 	}
 
 	return filePath, contentType, written, nil
+}
+
+func buildSpriteSheetPrompt(sourcePrompt, action string, frameCount int, layout string) string {
+	layoutInstruction := spriteSheetLayoutInstruction(layout)
+
+	return fmt.Sprintf(`%s
+
+Create a single sprite sheet image for this animation.
+Action: %s.
+Frame count: %d.
+Layout: %s.
+%s
+Keep the same character design, proportions, style, camera angle, lighting, and scale in every frame.
+Show clear incremental motion across frames.
+Use equal-sized cells and a clean or transparent background when appropriate.
+Do not add text labels, frame numbers, UI elements, watermarks, or decorative borders.`,
+		sourcePrompt,
+		action,
+		frameCount,
+		layout,
+		layoutInstruction,
+	)
+}
+
+func spriteSheetLayoutInstruction(layout string) string {
+	switch strings.ToLower(strings.TrimSpace(layout)) {
+	case "horizontal", "row", "strip":
+		return "Arrange the frames in one horizontal row, ordered left to right."
+	case "vertical", "column":
+		return "Arrange the frames in one vertical column, ordered top to bottom."
+	case "3x3", "3 by 3", "3-by-3", "3*3":
+		return "Arrange the frames in a 3 by 3 grid, ordered left to right and top to bottom."
+	default:
+		return "Arrange the frames using the requested layout exactly as written."
+	}
 }
 
 func extensionForContentType(contentType string) string {
@@ -246,7 +336,7 @@ func extensionFromURL(rawURL string) string {
 	return filepath.Ext(parsed.Path)
 }
 
-func buildFileName(model string, seed int64, ext string) string {
+func buildFileName(prefix, model string, seed int64, ext string) string {
 	replacer := strings.NewReplacer(
 		"/", "-",
 		"\\", "-",
@@ -262,7 +352,12 @@ func buildFileName(model string, seed int64, ext string) string {
 		safeModel = "image"
 	}
 
-	return fmt.Sprintf("%s-%d-%d%s", safeModel, time.Now().UTC().UnixNano(), seed, ext)
+	prefix = replacer.Replace(strings.TrimSpace(prefix))
+	if prefix != "" {
+		prefix += "-"
+	}
+
+	return fmt.Sprintf("%s%s-%d-%d%s", prefix, safeModel, time.Now().UTC().UnixNano(), seed, ext)
 }
 
 func firstHeaderValue(header http.Header, names ...string) string {
