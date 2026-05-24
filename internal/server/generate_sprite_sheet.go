@@ -1,0 +1,43 @@
+package server
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/mark3labs/mcp-go/mcp"
+
+	imagegen "github.com/oxkrypton/PixelsMcp/internal/service/imagegen"
+)
+
+type GenerateSpriteSheetArgs struct {
+	Prompt     string `json:"prompt" jsonschema:"Character or subject description used to generate the sprite sheet"`
+	Action     string `json:"action" jsonschema:"Animation action or motion to generate, such as idle, walk, attack, jump, or cast"`
+	FrameCount int    `json:"frame_count" jsonschema:"Number of animation frames to request in the sprite sheet"`
+	Layout     string `json:"layout,omitempty" jsonschema:"Sprite sheet layout, such as horizontal, vertical, or 3x3"`
+}
+
+type generateSpriteSheetToolHandler struct {
+	service *imagegen.Service
+}
+
+func (h *generateSpriteSheetToolHandler) handle(ctx context.Context, _ mcp.CallToolRequest, args GenerateSpriteSheetArgs) (*mcp.CallToolResult, error) {
+	result, err := h.service.GenerateSpriteSheet(ctx, imagegen.SpriteSheetOptions{
+		Prompt:     args.Prompt,
+		Action:     args.Action,
+		FrameCount: args.FrameCount,
+		Layout:     args.Layout,
+	})
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("sprite sheet generation failed: %v", err)), nil
+	}
+
+	return mcp.NewToolResultStructuredOnly(result), nil
+}
+
+func newGenerateSpriteSheetTool() mcp.Tool {
+	return mcp.NewTool(
+		"generate_sprite_sheet",
+		mcp.WithDescription("Generate a sprite sheet image from a prompt, action, frame count, and layout, save it locally, and return the file information"),
+		mcp.WithInputSchema[GenerateSpriteSheetArgs](),
+	)
+}
