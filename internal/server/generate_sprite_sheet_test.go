@@ -34,13 +34,16 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 	defer apiSrv.Close()
 
 	saveDir := t.TempDir()
-	service := imagegen.NewService(imagegen.Config{
+	service, err := imagegen.NewService(imagegen.Config{
 		APIKey:  "test-key",
 		BaseURL: apiSrv.URL,
 		Model:   "Custom/Model",
 		SaveDir: saveDir,
 		Client:  apiSrv.Client(),
 	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
 
 	handler := &generateSpriteSheetToolHandler{service: service}
 	wrapped := mcp.NewTypedToolHandler(handler.handle)

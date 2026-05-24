@@ -8,9 +8,15 @@ import (
 )
 
 func TestMCPServerRegistersImageAndSpriteSheetTools(t *testing.T) {
-	srv := New("PixelsMcp", "0.1.0", imagegen.NewService(imagegen.Config{
-		APIKey: "test-key",
-	}))
+	service, err := imagegen.NewService(imagegen.Config{
+		APIKey:  "test-key",
+		BaseURL: "http://example.invalid",
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	srv := New("PixelsMcp", "0.1.0", service)
 
 	tools := srv.ListTools()
 	if got := len(tools); got != 2 {
