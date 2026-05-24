@@ -3,16 +3,41 @@ package imagegen
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
+func newTestHTTPClient(handler func(*http.Request) (*http.Response, error)) *http.Client {
+	return &http.Client{Transport: roundTripperFunc(handler)}
+}
+
+func newTestResponse(status int, body string, headers map[string]string) *http.Response {
+	h := make(http.Header)
+	for key, value := range headers {
+		h.Set(key, value)
+	}
+
+	return &http.Response{
+		StatusCode: status,
+		Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
+		Header:     h,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
 func TestOpenAICompatibleProviderGenerate(t *testing.T) {
 	var captured map[string]any
 
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case openAIGenerationPath:
 			if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
@@ -24,21 +49,21 @@ func TestOpenAICompatibleProviderGenerate(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			w.Header().Set("X-Trace-Id", "trace-123")
-			_, _ = w.Write([]byte(`{"images":[{"url":"https://example.invalid/image.png"}],"timings":{"inference":9.5},"seed":321,"model":"Returned/Model"}`))
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"https://example.invalid/image.png"}],"timings":{"inference":9.5},"seed":321,"model":"Returned/Model"}`, map[string]string{
+				"X-Trace-Id": "trace-123",
+			}), nil
 		default:
-			http.NotFound(w, r)
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
 		}
-	}))
-	defer apiSrv.Close()
+	})
 
 	provider, err := NewProvider(ProviderConfig{
 		Provider:     ProviderOpenAICompatible,
 		APIKey:       "test-key",
-		BaseURL:      apiSrv.URL,
+		BaseURL:      "http://example.invalid",
 		Model:        "Requested/Model",
 		ExtraHeaders: map[string]string{"X-Client": "PixelsMcp"},
-		Client:       apiSrv.Client(),
+		Client:       client,
 	})
 	if err != nil {
 		t.Fatalf("NewProvider returned error: %v", err)
@@ -91,25 +116,24 @@ func TestOpenAICompatibleProviderGenerate(t *testing.T) {
 func TestOpenAICompatibleProviderGenerateOmitsUnsetOptions(t *testing.T) {
 	var captured map[string]any
 
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case openAIGenerationPath:
 			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			_, _ = w.Write([]byte(`{"images":[{"url":"https://example.invalid/image.png"}],"seed":321}`))
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"https://example.invalid/image.png"}],"seed":321}`, nil), nil
 		default:
-			http.NotFound(w, r)
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
 		}
-	}))
-	defer apiSrv.Close()
+	})
 
 	provider, err := NewProvider(ProviderConfig{
 		Provider: ProviderOpenAICompatible,
 		APIKey:   "test-key",
-		BaseURL:  apiSrv.URL,
+		BaseURL:  "http://example.invalid",
 		Model:    "Requested/Model",
-		Client:   apiSrv.Client(),
+		Client:   client,
 	})
 	if err != nil {
 		t.Fatalf("NewProvider returned error: %v", err)
@@ -129,7 +153,7 @@ func TestOpenAICompatibleProviderGenerateOmitsUnsetOptions(t *testing.T) {
 func TestOpenAICompatibleProviderListModelsAndValidate(t *testing.T) {
 	var seenPaths []string
 
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
 		seenPaths = append(seenPaths, r.URL.Path)
 		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
 			t.Fatalf("authorization header = %q, want Bearer test-key", got)
@@ -140,19 +164,18 @@ func TestOpenAICompatibleProviderListModelsAndValidate(t *testing.T) {
 
 		switch r.URL.Path {
 		case openAIModelsPath:
-			_, _ = w.Write([]byte(`{"data":[{"id":"alpha"},{"id":"Custom/Model"}]}`))
+			return newTestResponse(http.StatusOK, `{"data":[{"id":"alpha"},{"id":"Custom/Model"}]}`, nil), nil
 		default:
-			http.NotFound(w, r)
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
 		}
-	}))
-	defer apiSrv.Close()
+	})
 
 	provider, err := NewProvider(ProviderConfig{
 		APIKey:       "test-key",
-		BaseURL:      apiSrv.URL,
+		BaseURL:      "http://example.invalid",
 		Model:        "Custom/Model",
 		ExtraHeaders: map[string]string{"X-Client": "PixelsMcp"},
-		Client:       apiSrv.Client(),
+		Client:       client,
 	})
 	if err != nil {
 		t.Fatalf("NewProvider returned error: %v", err)
@@ -176,21 +199,20 @@ func TestOpenAICompatibleProviderListModelsAndValidate(t *testing.T) {
 }
 
 func TestOpenAICompatibleProviderValidateRejectsMissingModel(t *testing.T) {
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case openAIModelsPath:
-			_, _ = w.Write([]byte(`{"data":[{"id":"alpha"},{"id":"Other/Model"}]}`))
+			return newTestResponse(http.StatusOK, `{"data":[{"id":"alpha"},{"id":"Other/Model"}]}`, nil), nil
 		default:
-			http.NotFound(w, r)
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
 		}
-	}))
-	defer apiSrv.Close()
+	})
 
 	provider, err := NewProvider(ProviderConfig{
 		APIKey:  "test-key",
-		BaseURL: apiSrv.URL,
+		BaseURL: "http://example.invalid",
 		Model:   "Custom/Model",
-		Client:  apiSrv.Client(),
+		Client:  client,
 	})
 	if err != nil {
 		t.Fatalf("NewProvider returned error: %v", err)
@@ -202,16 +224,15 @@ func TestOpenAICompatibleProviderValidateRejectsMissingModel(t *testing.T) {
 }
 
 func TestOpenAICompatibleProviderReturnsStatusError(t *testing.T) {
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "provider boom", http.StatusServiceUnavailable)
-	}))
-	defer apiSrv.Close()
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		return newTestResponse(http.StatusServiceUnavailable, "provider boom", nil), nil
+	})
 
 	provider, err := NewProvider(ProviderConfig{
 		APIKey:  "test-key",
-		BaseURL: apiSrv.URL,
+		BaseURL: "http://example.invalid",
 		Model:   "Custom/Model",
-		Client:  apiSrv.Client(),
+		Client:  client,
 	})
 	if err != nil {
 		t.Fatalf("NewProvider returned error: %v", err)

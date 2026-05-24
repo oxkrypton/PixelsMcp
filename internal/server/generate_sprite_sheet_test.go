@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,29 +16,29 @@ import (
 func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 	var capturedBody map[string]any
 
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case "/v1/images/generations":
 			if err := json.NewDecoder(r.Body).Decode(&capturedBody); err != nil {
 				t.Fatalf("decode generation request: %v", err)
 			}
-			_, _ = w.Write([]byte(`{"images":[{"url":"http://` + r.Host + `/images/sprite.png"}],"timings":{"inference":27.5},"seed":88}`))
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/images/sprite.png"}],"timings":{"inference":27.5},"seed":88}`, nil), nil
 		case "/images/sprite.png":
-			w.Header().Set("Content-Type", "image/png")
-			_, _ = w.Write([]byte("fake-sprite"))
+			return newTestResponse(http.StatusOK, "fake-sprite", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
 		default:
-			http.NotFound(w, r)
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
 		}
-	}))
-	defer apiSrv.Close()
+	})
 
 	saveDir := t.TempDir()
 	service, err := imagegen.NewService(imagegen.Config{
 		APIKey:  "test-key",
-		BaseURL: apiSrv.URL,
+		BaseURL: "http://example.invalid",
 		Model:   "Custom/Model",
 		SaveDir: saveDir,
-		Client:  apiSrv.Client(),
+		Client:  client,
 	})
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)
@@ -56,6 +55,7 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 				"action":              "spell cast",
 				"frame_count":         6,
 				"layout":              "vertical",
+				"background_color":    "#00ff00",
 				"image_size":          "1024x1024",
 				"guidance_scale":      6.5,
 				"num_inference_steps": 30,
@@ -103,6 +103,12 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("generation prompt missing %q:\n%s", want, prompt)
 		}
+	}
+	if !strings.Contains(prompt, "Use a SOLID #00FF00 background (#00FF00) with absolutely no gradients, no transparency.") {
+		t.Fatalf("generation prompt missing solid background instruction:\n%s", prompt)
+	}
+	if strings.Contains(prompt, "light-gray background") {
+		t.Fatalf("generation prompt still contains default background:\n%s", prompt)
 	}
 	if got, ok := capturedBody["image_size"].(string); !ok || got != "1024x1024" {
 		t.Fatalf("image_size = %#v, want 1024x1024", capturedBody["image_size"])

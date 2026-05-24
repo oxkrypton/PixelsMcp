@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -13,7 +12,7 @@ import (
 func TestGenerateDownloadsAndSavesImage(t *testing.T) {
 	var gotRequest openAICompatibleGenerationRequest
 
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case "/v1/images/generations":
 			if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
@@ -22,24 +21,25 @@ func TestGenerateDownloadsAndSavesImage(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			w.Header().Set("X-Trace-Id", "trace-abc")
-			_, _ = w.Write([]byte(`{"images":[{"url":"http://` + r.Host + `/image.png"}],"timings":{"inference":17.5},"seed":123}`))
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/image.png"}],"timings":{"inference":17.5},"seed":123}`, map[string]string{
+				"X-Trace-Id": "trace-abc",
+			}), nil
 		case "/image.png":
-			w.Header().Set("Content-Type", "image/png")
-			_, _ = w.Write([]byte("PNGDATA"))
+			return newTestResponse(http.StatusOK, "PNGDATA", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
 		default:
-			http.NotFound(w, r)
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
 		}
-	}))
-	defer apiSrv.Close()
+	})
 
 	saveDir := t.TempDir()
 	svc, err := NewService(Config{
 		APIKey:  "test-key",
-		BaseURL: apiSrv.URL,
+		BaseURL: "http://example.invalid",
 		Model:   "Custom/Model",
 		SaveDir: saveDir,
-		Client:  apiSrv.Client(),
+		Client:  client,
 	})
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)
@@ -92,33 +92,120 @@ func TestGenerateRejectsEmptyPrompt(t *testing.T) {
 	}
 }
 
-func TestGenerateSpriteSheetBuildsPromptAndSavesImage(t *testing.T) {
+func TestGenerateWithOptionsBuildsBackgroundColorPrompt(t *testing.T) {
 	var gotRequest openAICompatibleGenerationRequest
 
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case "/v1/images/generations":
 			if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			w.Header().Set("X-Trace-Id", "trace-sprite")
-			_, _ = w.Write([]byte(`{"images":[{"url":"http://` + r.Host + `/sprite.png"}],"timings":{"inference":31.25},"seed":456}`))
-		case "/sprite.png":
-			w.Header().Set("Content-Type", "image/png")
-			_, _ = w.Write([]byte("SPRITEDATA"))
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/image.png"}],"seed":222}`, nil), nil
+		case "/image.png":
+			return newTestResponse(http.StatusOK, "PNGDATA", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
 		default:
-			http.NotFound(w, r)
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
 		}
-	}))
-	defer apiSrv.Close()
+	})
+
+	svc, err := NewService(Config{
+		APIKey:  "test-key",
+		BaseURL: "http://example.invalid",
+		Model:   "Custom/Model",
+		SaveDir: t.TempDir(),
+		Client:  client,
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	result, err := svc.GenerateWithOptions(context.Background(), "a robot in a garden", GenerationOptions{
+		BackgroundColor: "  #ff00ff  ",
+	})
+	if err != nil {
+		t.Fatalf("GenerateWithOptions returned error: %v", err)
+	}
+
+	for _, want := range []string{
+		"a robot in a garden",
+		"Use a SOLID #FF00FF background (#FF00FF) with absolutely no gradients, no transparency.",
+	} {
+		if !strings.Contains(gotRequest.Prompt, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, gotRequest.Prompt)
+		}
+	}
+	if result.Prompt != gotRequest.Prompt {
+		t.Fatalf("result prompt = %q, want generated prompt", result.Prompt)
+	}
+}
+
+func TestGenerateWithOptionsRejectsInvalidBackgroundColor(t *testing.T) {
+	svc, err := NewService(Config{
+		APIKey:  "test-key",
+		BaseURL: "http://example.invalid",
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		opts GenerationOptions
+	}{
+		{
+			name: "missing hash",
+			opts: GenerationOptions{BackgroundColor: "00ff00"},
+		},
+		{
+			name: "short hex",
+			opts: GenerationOptions{BackgroundColor: "#123"},
+		},
+		{
+			name: "invalid hex digit",
+			opts: GenerationOptions{BackgroundColor: "#12GG34"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := svc.GenerateWithOptions(context.Background(), "a robot in a garden", tt.opts); err == nil {
+				t.Fatal("GenerateWithOptions returned nil error")
+			}
+		})
+	}
+}
+
+func TestGenerateSpriteSheetBuildsPromptAndSavesImage(t *testing.T) {
+	var gotRequest openAICompatibleGenerationRequest
+
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/sprite.png"}],"timings":{"inference":31.25},"seed":456}`, map[string]string{
+				"X-Trace-Id": "trace-sprite",
+			}), nil
+		case "/sprite.png":
+			return newTestResponse(http.StatusOK, "SPRITEDATA", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
+		default:
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
+		}
+	})
 
 	saveDir := t.TempDir()
 	svc, err := NewService(Config{
 		APIKey:  "test-key",
-		BaseURL: apiSrv.URL,
+		BaseURL: "http://example.invalid",
 		Model:   "Custom/Model",
 		SaveDir: saveDir,
-		Client:  apiSrv.Client(),
+		Client:  client,
 	})
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)
@@ -193,30 +280,92 @@ func TestGenerateSpriteSheetBuildsPromptAndSavesImage(t *testing.T) {
 	}
 }
 
-func TestGenerateSpriteSheetDefaultsToHorizontalLayout(t *testing.T) {
+func TestGenerateSpriteSheetBuildsBackgroundColorPrompt(t *testing.T) {
 	var gotRequest openAICompatibleGenerationRequest
 
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case "/v1/images/generations":
 			if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			_, _ = w.Write([]byte(`{"images":[{"url":"http://` + r.Host + `/sprite.png"}],"seed":789}`))
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/sprite.png"}],"seed":654}`, nil), nil
 		case "/sprite.png":
-			w.Header().Set("Content-Type", "image/png")
-			_, _ = w.Write([]byte("SPRITEDATA"))
+			return newTestResponse(http.StatusOK, "SPRITEDATA", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
 		default:
-			http.NotFound(w, r)
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
 		}
-	}))
-	defer apiSrv.Close()
+	})
 
 	svc, err := NewService(Config{
 		APIKey:  "test-key",
-		BaseURL: apiSrv.URL,
+		BaseURL: "http://example.invalid",
+		Model:   "Custom/Model",
 		SaveDir: t.TempDir(),
-		Client:  apiSrv.Client(),
+		Client:  client,
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	result, err := svc.GenerateSpriteSheet(context.Background(), SpriteSheetOptions{
+		Prompt:     "pixel knight with a blue cape",
+		Action:     "dash strike",
+		FrameCount: 9,
+		Layout:     "3x3",
+		Generation: GenerationOptions{
+			BackgroundColor: " #00ff00 ",
+		},
+	})
+	if err != nil {
+		t.Fatalf("GenerateSpriteSheet returned error: %v", err)
+	}
+
+	for _, want := range []string{
+		"Use a SOLID #00FF00 background (#00FF00) with absolutely no gradients, no transparency.",
+		"pixel knight with a blue cape",
+		"Action: dash strike.",
+		"Frame count: 9.",
+		"Layout: 3x3.",
+	} {
+		if !strings.Contains(gotRequest.Prompt, want) {
+			t.Fatalf("sprite prompt missing %q:\n%s", want, gotRequest.Prompt)
+		}
+	}
+	if strings.Contains(gotRequest.Prompt, "light-gray background") {
+		t.Fatalf("sprite prompt still contains default background:\n%s", gotRequest.Prompt)
+	}
+	if result.Prompt != gotRequest.Prompt {
+		t.Fatalf("result prompt = %q, want generated prompt", result.Prompt)
+	}
+}
+
+func TestGenerateSpriteSheetDefaultsToHorizontalLayout(t *testing.T) {
+	var gotRequest openAICompatibleGenerationRequest
+
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/sprite.png"}],"seed":789}`, nil), nil
+		case "/sprite.png":
+			return newTestResponse(http.StatusOK, "SPRITEDATA", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
+		default:
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
+		}
+	})
+
+	svc, err := NewService(Config{
+		APIKey:  "test-key",
+		BaseURL: "http://example.invalid",
+		SaveDir: t.TempDir(),
+		Client:  client,
 	})
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)

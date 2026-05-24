@@ -3,10 +3,12 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -14,10 +16,34 @@ import (
 	imagegen "github.com/oxkrypton/PixelsMcp/internal/service/imagegen"
 )
 
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
+func newTestHTTPClient(handler func(*http.Request) (*http.Response, error)) *http.Client {
+	return &http.Client{Transport: roundTripperFunc(handler)}
+}
+
+func newTestResponse(status int, body string, headers map[string]string) *http.Response {
+	h := make(http.Header)
+	for key, value := range headers {
+		h.Set(key, value)
+	}
+
+	return &http.Response{
+		StatusCode: status,
+		Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
+		Header:     h,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
 func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 	var capturedBody map[string]any
 
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case "/v1/images/generations":
 			if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
@@ -26,24 +52,25 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&capturedBody); err != nil {
 				t.Fatalf("decode generation request: %v", err)
 			}
-			w.Header().Set("X-Trace-Id", "trace-123")
-			_, _ = w.Write([]byte(`{"images":[{"url":"http://` + r.Host + `/images/1.png"}],"timings":{"inference":42.25},"seed":99}`))
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/images/1.png"}],"timings":{"inference":42.25},"seed":99}`, map[string]string{
+				"X-Trace-Id": "trace-123",
+			}), nil
 		case "/images/1.png":
-			w.Header().Set("Content-Type", "image/png")
-			_, _ = w.Write([]byte("fake-png"))
+			return newTestResponse(http.StatusOK, "fake-png", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
 		default:
-			http.NotFound(w, r)
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
 		}
-	}))
-	defer apiSrv.Close()
+	})
 
 	saveDir := t.TempDir()
 	service, err := imagegen.NewService(imagegen.Config{
 		APIKey:  "test-key",
-		BaseURL: apiSrv.URL,
+		BaseURL: "http://example.invalid",
 		Model:   "Custom/Model",
 		SaveDir: saveDir,
-		Client:  apiSrv.Client(),
+		Client:  client,
 	})
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)
@@ -56,7 +83,8 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 		Params: mcp.CallToolParams{
 			Name: "generate_image",
 			Arguments: map[string]any{
-				"prompt": "a white cat sitting on a window",
+				"prompt":           "a white cat sitting on a window",
+				"background_color": "#ff00ff",
 			},
 		},
 	})
@@ -74,10 +102,7 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 	if !ok {
 		t.Fatalf("structured content type = %T, want *imagegen.Result", result.StructuredContent)
 	}
-	if parsed.Prompt != "a white cat sitting on a window" {
-		t.Fatalf("prompt = %q, want prompt", parsed.Prompt)
-	}
-	if parsed.ImageURL != apiSrv.URL+"/images/1.png" {
+	if parsed.ImageURL != "http://example.invalid/images/1.png" {
 		t.Fatalf("imageURL = %q, want generated url", parsed.ImageURL)
 	}
 	if parsed.TraceID != "trace-123" {
@@ -89,6 +114,21 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 	if parsed.InferenceMS != 42.25 {
 		t.Fatalf("inferenceMS = %v, want 42.25", parsed.InferenceMS)
 	}
+	prompt, ok := capturedBody["prompt"].(string)
+	if !ok {
+		t.Fatalf("generation prompt = %#v, want string", capturedBody["prompt"])
+	}
+	if parsed.Prompt != prompt {
+		t.Fatalf("prompt = %q, want %q", parsed.Prompt, prompt)
+	}
+	for _, want := range []string{
+		"a white cat sitting on a window",
+		"Use a SOLID #FF00FF background (#FF00FF) with absolutely no gradients, no transparency.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("generation prompt missing %q:\n%s", want, prompt)
+		}
+	}
 	if parsed.LocalPath == "" {
 		t.Fatal("localPath is empty")
 	}
@@ -97,9 +137,6 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 	}
 	if got, want := string(mustReadFile(t, parsed.LocalPath)), "fake-png"; got != want {
 		t.Fatalf("saved image content = %q, want %q", got, want)
-	}
-	if capturedBody["prompt"] != "a white cat sitting on a window" {
-		t.Fatalf("generation prompt = %#v, want prompt", capturedBody["prompt"])
 	}
 	if capturedBody["model"] != "Custom/Model" {
 		t.Fatalf("generation model = %#v, want Custom/Model", capturedBody["model"])
