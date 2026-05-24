@@ -30,6 +30,12 @@ type Service struct {
 	client   *http.Client
 }
 
+const (
+	defaultSpriteSheetFrameWidth  = 64
+	defaultSpriteSheetFrameHeight = 64
+	defaultSpriteSheetSpacing     = 2
+)
+
 type Result struct {
 	Prompt       string    `json:"prompt"`
 	Model        string    `json:"model"`
@@ -45,11 +51,14 @@ type Result struct {
 }
 
 type SpriteSheetOptions struct {
-	Prompt     string
-	Action     string
-	FrameCount int
-	Layout     string
-	Generation GenerationOptions
+	Prompt      string
+	Action      string
+	FrameCount  int
+	Layout      string
+	FrameWidth  int
+	FrameHeight int
+	Spacing     int
+	Generation  GenerationOptions
 }
 
 type SpriteSheetResult struct {
@@ -124,8 +133,21 @@ func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptio
 		layout = "horizontal"
 	}
 
-	generationPrompt := buildSpriteSheetPrompt(sourcePrompt, action, opts.FrameCount, layout)
-	generationPrompt, err := buildPromptWithBackground(generationPrompt, opts.Generation.BackgroundColor, "Use a solid light-gray background.")
+	frameWidth := opts.FrameWidth
+	if frameWidth <= 0 {
+		frameWidth = defaultSpriteSheetFrameWidth
+	}
+	frameHeight := opts.FrameHeight
+	if frameHeight <= 0 {
+		frameHeight = defaultSpriteSheetFrameHeight
+	}
+	spacing := opts.Spacing
+	if spacing <= 0 {
+		spacing = defaultSpriteSheetSpacing
+	}
+
+	generationPrompt := buildSpriteSheetPrompt(sourcePrompt, action, opts.FrameCount, layout, frameWidth, frameHeight, spacing)
+	generationPrompt, err := buildPromptWithBackground(generationPrompt, opts.Generation.BackgroundColor, "Use a solid light-gray background (#D9D9D9) in every empty pixel, with no texture, no gradients, and no transparency.")
 	if err != nil {
 		return nil, err
 	}
@@ -231,8 +253,9 @@ func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Re
 	return filePath, contentType, written, nil
 }
 
-func buildSpriteSheetPrompt(sourcePrompt, action string, frameCount int, layout string) string {
+func buildSpriteSheetPrompt(sourcePrompt, action string, frameCount int, layout string, frameWidth, frameHeight, spacing int) string {
 	layoutInstruction := spriteSheetLayoutInstruction(layout)
+	geometryInstruction := spriteSheetGeometryInstruction(frameCount, layout, frameWidth, frameHeight, spacing)
 
 	return fmt.Sprintf(`%s
 
@@ -241,17 +264,18 @@ Action: %s.
 Frame count: %d.
 Layout: %s.
 %s
-Each frame is exactly 64x64 pixels.
-Use pixel-perfect rendering with crisp edges, nearest-neighbor filtering, and a limited color palette.
+%s
+Use pixel-perfect rendering with hard square pixels, crisp edges, no anti-aliasing, no blur, nearest-neighbor filtering, and a limited color palette.
 Keep the same character design, proportions, style, camera angle, lighting, and scale in every frame.
 Show clear incremental motion across frames.
-Leave 2px spacing between frames.
-Do not add text labels, frame numbers, UI elements, watermarks, or decorative borders.`,
+Place exactly one character in each cell.
+Do not add text labels, frame numbers, UI elements, watermarks, decorative borders, or extra rows.`,
 		sourcePrompt,
 		action,
 		frameCount,
 		layout,
 		layoutInstruction,
+		geometryInstruction,
 	)
 }
 
@@ -322,6 +346,62 @@ func spriteSheetLayoutInstruction(layout string) string {
 	default:
 		return "Arrange the frames using the requested layout exactly as written."
 	}
+}
+
+func spriteSheetGeometryInstruction(frameCount int, layout string, frameWidth, frameHeight, spacing int) string {
+	frameWidth = positiveOrDefault(frameWidth, defaultSpriteSheetFrameWidth)
+	frameHeight = positiveOrDefault(frameHeight, defaultSpriteSheetFrameHeight)
+	spacing = positiveOrDefault(spacing, defaultSpriteSheetSpacing)
+
+	frameInstruction := fmt.Sprintf(
+		"Frame geometry: %d cells, each cell exactly %dx%d pixels, with exactly %dpx spacing between cells and no outer padding.",
+		frameCount,
+		frameWidth,
+		frameHeight,
+		spacing,
+	)
+
+	if width, height, ok := spriteSheetCanvasSize(frameCount, layout, frameWidth, frameHeight, spacing); ok {
+		return fmt.Sprintf(
+			"Canvas geometry: total image is exactly %dx%d pixels.\n%s",
+			width,
+			height,
+			frameInstruction,
+		)
+	}
+
+	return frameInstruction
+}
+
+func spriteSheetCanvasSize(frameCount int, layout string, frameWidth, frameHeight, spacing int) (int, int, bool) {
+	if frameCount <= 0 {
+		return 0, 0, false
+	}
+
+	switch strings.ToLower(strings.TrimSpace(layout)) {
+	case "horizontal", "row", "strip":
+		return frameCount*frameWidth + max(frameCount-1, 0)*spacing, frameHeight, true
+	case "vertical", "column":
+		return frameWidth, frameCount*frameHeight + max(frameCount-1, 0)*spacing, true
+	case "3x3", "3 by 3", "3-by-3", "3*3":
+		return 3*frameWidth + 2*spacing, 3*frameHeight + 2*spacing, true
+	default:
+		return 0, 0, false
+	}
+}
+
+func positiveOrDefault(value, defaultValue int) int {
+	if value > 0 {
+		return value
+	}
+	return defaultValue
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func extensionForContentType(contentType string) string {

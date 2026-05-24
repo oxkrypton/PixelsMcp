@@ -121,10 +121,10 @@ curl http://127.0.0.1:8080/healthz
 ## Tools
 
 - `generate_image`: generates an image from `prompt`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
-- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
+- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, optional `frame_width`, `frame_height`, `spacing`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
 
 Use `background_color` for a solid key color like `#00FF00` or `#FF00FF`.
-If you omit it on sprite sheets, the existing light-gray background stays in place.
+Sprite sheets default to 64x64 frames with 2px spacing and a light-gray background if you omit those geometry fields and `background_color`.
 
 Example image arguments:
 
@@ -148,6 +148,9 @@ Example sprite sheet arguments:
   "action": "walk",
   "frame_count": 8,
   "layout": "horizontal",
+  "frame_width": 64,
+  "frame_height": 64,
+  "spacing": 2,
   "background_color": "#00FF00",
   "image_size": "1024x1024",
   "guidance_scale": 7.5,

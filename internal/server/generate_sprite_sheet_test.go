@@ -55,6 +55,9 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 				"action":              "spell cast",
 				"frame_count":         6,
 				"layout":              "vertical",
+				"frame_width":         32,
+				"frame_height":        48,
+				"spacing":             4,
 				"background_color":    "#00ff00",
 				"image_size":          "1024x1024",
 				"guidance_scale":      6.5,
@@ -102,6 +105,14 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 		t.Fatalf("generation prompt = %#v, want string", capturedBody["prompt"])
 	}
 	for _, want := range []string{"Action: spell cast.", "Frame count: 6.", "Layout: vertical.", "vertical column"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("generation prompt missing %q:\n%s", want, prompt)
+		}
+	}
+	for _, want := range []string{
+		"Canvas geometry: total image is exactly 32x308 pixels.",
+		"Frame geometry: 6 cells, each cell exactly 32x48 pixels, with exactly 4px spacing between cells and no outer padding.",
+	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("generation prompt missing %q:\n%s", want, prompt)
 		}

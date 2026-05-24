@@ -220,10 +220,13 @@ func TestGenerateSpriteSheetBuildsPromptAndSavesImage(t *testing.T) {
 	}
 
 	result, err := svc.GenerateSpriteSheet(context.Background(), SpriteSheetOptions{
-		Prompt:     "pixel knight with a blue cape",
-		Action:     "dash strike",
-		FrameCount: 9,
-		Layout:     "3x3",
+		Prompt:      "pixel knight with a blue cape",
+		Action:      "dash strike",
+		FrameCount:  9,
+		Layout:      "3x3",
+		FrameWidth:  64,
+		FrameHeight: 64,
+		Spacing:     2,
 		Generation: GenerationOptions{
 			ImageSize:         "1024x1024",
 			GuidanceScale:     7.5,
@@ -241,11 +244,13 @@ func TestGenerateSpriteSheetBuildsPromptAndSavesImage(t *testing.T) {
 		"Frame count: 9.",
 		"Layout: 3x3.",
 		"3 by 3 grid",
-		"Each frame is exactly 64x64 pixels.",
+		"Canvas geometry: total image is exactly 196x196 pixels.",
+		"Frame geometry: 9 cells, each cell exactly 64x64 pixels, with exactly 2px spacing between cells and no outer padding.",
+		"hard square pixels",
 		"nearest-neighbor filtering",
 		"limited color palette",
-		"Leave 2px spacing between frames.",
-		"solid light-gray background",
+		"Place exactly one character in each cell.",
+		"Use a solid light-gray background (#D9D9D9) in every empty pixel, with no texture, no gradients, and no transparency.",
 	} {
 		if !strings.Contains(gotRequest.Prompt, want) {
 			t.Fatalf("sprite prompt missing %q:\n%s", want, gotRequest.Prompt)
@@ -319,10 +324,13 @@ func TestGenerateSpriteSheetBuildsBackgroundColorPrompt(t *testing.T) {
 	}
 
 	result, err := svc.GenerateSpriteSheet(context.Background(), SpriteSheetOptions{
-		Prompt:     "pixel knight with a blue cape",
-		Action:     "dash strike",
-		FrameCount: 9,
-		Layout:     "3x3",
+		Prompt:      "pixel knight with a blue cape",
+		Action:      "dash strike",
+		FrameCount:  9,
+		Layout:      "3x3",
+		FrameWidth:  48,
+		FrameHeight: 48,
+		Spacing:     4,
 		Generation: GenerationOptions{
 			BackgroundColor: " #00ff00 ",
 		},
@@ -337,6 +345,8 @@ func TestGenerateSpriteSheetBuildsBackgroundColorPrompt(t *testing.T) {
 		"Action: dash strike.",
 		"Frame count: 9.",
 		"Layout: 3x3.",
+		"Canvas geometry: total image is exactly 152x152 pixels.",
+		"Frame geometry: 9 cells, each cell exactly 48x48 pixels, with exactly 4px spacing between cells and no outer padding.",
 	} {
 		if !strings.Contains(gotRequest.Prompt, want) {
 			t.Fatalf("sprite prompt missing %q:\n%s", want, gotRequest.Prompt)
@@ -380,9 +390,12 @@ func TestGenerateSpriteSheetDefaultsToHorizontalLayout(t *testing.T) {
 	}
 
 	result, err := svc.GenerateSpriteSheet(context.Background(), SpriteSheetOptions{
-		Prompt:     "robot mascot",
-		Action:     "idle",
-		FrameCount: 4,
+		Prompt:      "robot mascot",
+		Action:      "idle",
+		FrameCount:  4,
+		FrameWidth:  64,
+		FrameHeight: 64,
+		Spacing:     2,
 	})
 	if err != nil {
 		t.Fatalf("GenerateSpriteSheet returned error: %v", err)
@@ -393,6 +406,14 @@ func TestGenerateSpriteSheetDefaultsToHorizontalLayout(t *testing.T) {
 	}
 	if !strings.Contains(gotRequest.Prompt, "one horizontal row") {
 		t.Fatalf("sprite prompt missing horizontal instruction:\n%s", gotRequest.Prompt)
+	}
+	for _, want := range []string{
+		"Canvas geometry: total image is exactly 262x64 pixels.",
+		"Frame geometry: 4 cells, each cell exactly 64x64 pixels, with exactly 2px spacing between cells and no outer padding.",
+	} {
+		if !strings.Contains(gotRequest.Prompt, want) {
+			t.Fatalf("sprite prompt missing %q:\n%s", want, gotRequest.Prompt)
+		}
 	}
 }
 
