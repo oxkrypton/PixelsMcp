@@ -10,7 +10,7 @@ import (
 )
 
 func TestOpenAICompatibleProviderGenerate(t *testing.T) {
-	var captured openAICompatibleGenerationRequest
+	var captured map[string]any
 
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -44,16 +44,32 @@ func TestOpenAICompatibleProviderGenerate(t *testing.T) {
 		t.Fatalf("NewProvider returned error: %v", err)
 	}
 
-	result, err := provider.Generate(context.Background(), "a blue robot")
+	result, err := provider.Generate(context.Background(), "a blue robot", GenerationOptions{
+		ImageSize:         "1024x1024",
+		GuidanceScale:     7.25,
+		NumInferenceSteps: 32,
+	})
 	if err != nil {
 		t.Fatalf("Generate returned error: %v", err)
 	}
 
-	if captured.Model != "Requested/Model" {
-		t.Fatalf("model = %q, want Requested/Model", captured.Model)
+	if got, ok := captured["model"].(string); !ok || got != "Requested/Model" {
+		t.Fatalf("model = %#v, want Requested/Model", captured["model"])
 	}
-	if captured.Prompt != "a blue robot" {
-		t.Fatalf("prompt = %q, want a blue robot", captured.Prompt)
+	if got, ok := captured["prompt"].(string); !ok || got != "a blue robot" {
+		t.Fatalf("prompt = %#v, want a blue robot", captured["prompt"])
+	}
+	if got, ok := captured["image_size"].(string); !ok || got != "1024x1024" {
+		t.Fatalf("image_size = %#v, want 1024x1024", captured["image_size"])
+	}
+	if got, ok := captured["guidance_scale"].(float64); !ok || got != 7.25 {
+		t.Fatalf("guidance_scale = %#v, want 7.25", captured["guidance_scale"])
+	}
+	if got, ok := captured["num_inference_steps"].(float64); !ok || got != 32 {
+		t.Fatalf("num_inference_steps = %#v, want 32", captured["num_inference_steps"])
+	}
+	if _, ok := captured["batch_size"]; ok {
+		t.Fatalf("batch_size = %#v, want omitted", captured["batch_size"])
 	}
 	if result.Model != "Returned/Model" {
 		t.Fatalf("result model = %q, want Returned/Model", result.Model)
@@ -69,6 +85,44 @@ func TestOpenAICompatibleProviderGenerate(t *testing.T) {
 	}
 	if result.InferenceMS != 9.5 {
 		t.Fatalf("inferenceMS = %v, want 9.5", result.InferenceMS)
+	}
+}
+
+func TestOpenAICompatibleProviderGenerateOmitsUnsetOptions(t *testing.T) {
+	var captured map[string]any
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case openAIGenerationPath:
+			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			_, _ = w.Write([]byte(`{"images":[{"url":"https://example.invalid/image.png"}],"seed":321}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer apiSrv.Close()
+
+	provider, err := NewProvider(ProviderConfig{
+		Provider: ProviderOpenAICompatible,
+		APIKey:   "test-key",
+		BaseURL:  apiSrv.URL,
+		Model:    "Requested/Model",
+		Client:   apiSrv.Client(),
+	})
+	if err != nil {
+		t.Fatalf("NewProvider returned error: %v", err)
+	}
+
+	if _, err := provider.Generate(context.Background(), "a blue robot", GenerationOptions{}); err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	for _, key := range []string{"image_size", "guidance_scale", "num_inference_steps", "batch_size"} {
+		if _, ok := captured[key]; ok {
+			t.Fatalf("%s = %#v, want omitted", key, captured[key])
+		}
 	}
 }
 
@@ -163,7 +217,7 @@ func TestOpenAICompatibleProviderReturnsStatusError(t *testing.T) {
 		t.Fatalf("NewProvider returned error: %v", err)
 	}
 
-	if _, err := provider.Generate(context.Background(), "a blue robot"); err == nil || !strings.Contains(err.Error(), "status 503") {
+	if _, err := provider.Generate(context.Background(), "a blue robot", GenerationOptions{}); err == nil || !strings.Contains(err.Error(), "status 503") {
 		t.Fatalf("Generate error = %v, want status 503", err)
 	}
 }

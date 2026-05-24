@@ -52,10 +52,13 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 		Params: mcp.CallToolParams{
 			Name: "generate_sprite_sheet",
 			Arguments: map[string]any{
-				"prompt":      "a wizard with a red robe",
-				"action":      "spell cast",
-				"frame_count": 6,
-				"layout":      "vertical",
+				"prompt":              "a wizard with a red robe",
+				"action":              "spell cast",
+				"frame_count":         6,
+				"layout":              "vertical",
+				"image_size":          "1024x1024",
+				"guidance_scale":      6.5,
+				"num_inference_steps": 30,
 			},
 		},
 	})
@@ -100,5 +103,14 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("generation prompt missing %q:\n%s", want, prompt)
 		}
+	}
+	if got, ok := capturedBody["image_size"].(string); !ok || got != "1024x1024" {
+		t.Fatalf("image_size = %#v, want 1024x1024", capturedBody["image_size"])
+	}
+	if got, ok := capturedBody["guidance_scale"].(float64); !ok || got != 6.5 {
+		t.Fatalf("guidance_scale = %#v, want 6.5", capturedBody["guidance_scale"])
+	}
+	if got, ok := capturedBody["num_inference_steps"].(float64); !ok || got != 30 {
+		t.Fatalf("num_inference_steps = %#v, want 30", capturedBody["num_inference_steps"])
 	}
 }

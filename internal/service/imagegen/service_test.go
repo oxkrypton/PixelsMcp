@@ -129,21 +129,41 @@ func TestGenerateSpriteSheetBuildsPromptAndSavesImage(t *testing.T) {
 		Action:     "dash strike",
 		FrameCount: 9,
 		Layout:     "3x3",
+		Generation: GenerationOptions{
+			ImageSize:         "1024x1024",
+			GuidanceScale:     7.5,
+			NumInferenceSteps: 28,
+		},
 	})
 	if err != nil {
 		t.Fatalf("GenerateSpriteSheet returned error: %v", err)
 	}
 
 	for _, want := range []string{
+		"16-bit pixel art style",
 		"pixel knight with a blue cape",
 		"Action: dash strike.",
 		"Frame count: 9.",
 		"Layout: 3x3.",
 		"3 by 3 grid",
+		"Each frame is exactly 64x64 pixels.",
+		"nearest-neighbor filtering",
+		"limited color palette",
+		"Leave 2px spacing between frames.",
+		"solid light-gray background",
 	} {
 		if !strings.Contains(gotRequest.Prompt, want) {
 			t.Fatalf("sprite prompt missing %q:\n%s", want, gotRequest.Prompt)
 		}
+	}
+	if gotRequest.ImageSize != "1024x1024" {
+		t.Fatalf("imageSize = %q, want 1024x1024", gotRequest.ImageSize)
+	}
+	if gotRequest.GuidanceScale != 7.5 {
+		t.Fatalf("guidanceScale = %v, want 7.5", gotRequest.GuidanceScale)
+	}
+	if gotRequest.NumInferenceSteps != 28 {
+		t.Fatalf("numInferenceSteps = %d, want 28", gotRequest.NumInferenceSteps)
 	}
 	if result.SourcePrompt != "pixel knight with a blue cape" {
 		t.Fatalf("sourcePrompt = %q, want original prompt", result.SourcePrompt)
