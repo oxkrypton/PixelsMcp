@@ -3,9 +3,12 @@ package app
 import (
 	"reflect"
 	"testing"
+	"time"
+
+	imagegen "github.com/oxkrypton/PixelsMcp/internal/service/imagegen"
 )
 
-func TestConfigFromEnvDefaultsToStdio(t *testing.T) {
+func TestConfigFromEnvDefaults(t *testing.T) {
 	cfg, err := configFromEnv(func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("configFromEnv returned error: %v", err)
@@ -14,23 +17,17 @@ func TestConfigFromEnvDefaultsToStdio(t *testing.T) {
 	if cfg.transport != transportStdio {
 		t.Fatalf("transport = %q, want %q", cfg.transport, transportStdio)
 	}
-	if cfg.addr != defaultHTTPAddr {
-		t.Fatalf("addr = %q, want %q", cfg.addr, defaultHTTPAddr)
+	if cfg.provider != imagegen.DefaultProvider {
+		t.Fatalf("provider = %q, want %q", cfg.provider, imagegen.DefaultProvider)
 	}
-	if cfg.mcpEndpoint != defaultMCPEndpoint {
-		t.Fatalf("mcpEndpoint = %q, want %q", cfg.mcpEndpoint, defaultMCPEndpoint)
+	if cfg.model != imagegen.DefaultModel {
+		t.Fatalf("model = %q, want %q", cfg.model, imagegen.DefaultModel)
 	}
-	if cfg.healthEndpoint != defaultHealthEndpoint {
-		t.Fatalf("healthEndpoint = %q, want %q", cfg.healthEndpoint, defaultHealthEndpoint)
+	if cfg.timeout != imagegen.DefaultRequestTimeout {
+		t.Fatalf("timeout = %v, want %v", cfg.timeout, imagegen.DefaultRequestTimeout)
 	}
-	if cfg.baseURL != defaultBaseURL {
-		t.Fatalf("baseURL = %q, want %q", cfg.baseURL, defaultBaseURL)
-	}
-	if cfg.imageModel != defaultImageModel {
-		t.Fatalf("imageModel = %q, want %q", cfg.imageModel, defaultImageModel)
-	}
-	if cfg.imageSaveDir != defaultImageSaveDir {
-		t.Fatalf("imageSaveDir = %q, want %q", cfg.imageSaveDir, defaultImageSaveDir)
+	if cfg.imageSaveDir != imagegen.DefaultSaveDir {
+		t.Fatalf("imageSaveDir = %q, want %q", cfg.imageSaveDir, imagegen.DefaultSaveDir)
 	}
 }
 
@@ -41,9 +38,12 @@ func TestConfigFromEnvHTTP(t *testing.T) {
 		"PIXELSMCP_ENDPOINT":        "api/mcp/",
 		"PIXELSMCP_HEALTH_ENDPOINT": "ready",
 		"PIXELSMCP_CORS_ORIGINS":    "https://example.com, https://app.example.com ",
+		"PIXELSMCP_PROVIDER":        "openai-compatible",
 		"PIXELSMCP_API_KEY":         "test-key",
 		"PIXELSMCP_BASE_URL":        "https://example.invalid",
-		"PIXELSMCP_IMAGE_MODEL":     "Custom/Model",
+		"PIXELSMCP_MODEL":           "Custom/Model",
+		"PIXELSMCP_EXTRA_HEADERS":   `{"X-Client":"PixelsMcp","X-Env":"test"}`,
+		"PIXELSMCP_TIMEOUT":         "45s",
 		"PIXELSMCP_IMAGE_SAVE_DIR":  "/tmp/pixelsmcp",
 	}
 
@@ -64,17 +64,27 @@ func TestConfigFromEnvHTTP(t *testing.T) {
 	if cfg.healthEndpoint != "/ready" {
 		t.Fatalf("healthEndpoint = %q, want /ready", cfg.healthEndpoint)
 	}
+	if cfg.provider != "openai-compatible" {
+		t.Fatalf("provider = %q, want openai-compatible", cfg.provider)
+	}
 	if cfg.apiKey != "test-key" {
 		t.Fatalf("apiKey = %q, want test-key", cfg.apiKey)
 	}
 	if cfg.baseURL != "https://example.invalid" {
 		t.Fatalf("baseURL = %q, want https://example.invalid", cfg.baseURL)
 	}
-	if cfg.imageModel != "Custom/Model" {
-		t.Fatalf("imageModel = %q, want Custom/Model", cfg.imageModel)
+	if cfg.model != "Custom/Model" {
+		t.Fatalf("model = %q, want Custom/Model", cfg.model)
+	}
+	if cfg.timeout != 45*time.Second {
+		t.Fatalf("timeout = %v, want 45s", cfg.timeout)
 	}
 	if cfg.imageSaveDir != "/tmp/pixelsmcp" {
 		t.Fatalf("imageSaveDir = %q, want /tmp/pixelsmcp", cfg.imageSaveDir)
+	}
+	wantHeaders := map[string]string{"X-Client": "PixelsMcp", "X-Env": "test"}
+	if !reflect.DeepEqual(cfg.extraHeaders, wantHeaders) {
+		t.Fatalf("extraHeaders = %#v, want %#v", cfg.extraHeaders, wantHeaders)
 	}
 	wantOrigins := []string{"https://example.com", "https://app.example.com"}
 	if !reflect.DeepEqual(cfg.corsOrigins, wantOrigins) {
@@ -82,10 +92,37 @@ func TestConfigFromEnvHTTP(t *testing.T) {
 	}
 }
 
+func TestConfigFromEnvModelFallbackToLegacyName(t *testing.T) {
+	env := map[string]string{
+		"PIXELSMCP_IMAGE_MODEL": "Legacy/Model",
+	}
+
+	cfg, err := configFromEnv(func(key string) string { return env[key] })
+	if err != nil {
+		t.Fatalf("configFromEnv returned error: %v", err)
+	}
+
+	if cfg.model != "Legacy/Model" {
+		t.Fatalf("model = %q, want Legacy/Model", cfg.model)
+	}
+}
+
 func TestConfigFromEnvRejectsInvalidTransport(t *testing.T) {
 	_, err := configFromEnv(func(key string) string {
 		if key == "PIXELSMCP_TRANSPORT" {
 			return "tcp"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("configFromEnv returned nil error")
+	}
+}
+
+func TestConfigFromEnvRejectsInvalidTimeout(t *testing.T) {
+	_, err := configFromEnv(func(key string) string {
+		if key == "PIXELSMCP_TIMEOUT" {
+			return "not-a-duration"
 		}
 		return ""
 	})

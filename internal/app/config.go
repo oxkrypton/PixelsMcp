@@ -1,22 +1,23 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
+
+	imagegen "github.com/oxkrypton/PixelsMcp/internal/service/imagegen"
 )
 
 type transport string
 
 const (
 	transportStdio transport = "stdio"
-	transportHTTP  transport = "http"
+	transportHTTP   transport = "http"
 
 	defaultHTTPAddr       = ":8080"
 	defaultMCPEndpoint    = "/mcp"
 	defaultHealthEndpoint = "/healthz"
-	defaultImageSaveDir   = "./generated-images"
-	defaultImageModel     = "Kwai-Kolors/Kolors"
-	defaultBaseURL        = ""
 )
 
 type config struct {
@@ -25,9 +26,12 @@ type config struct {
 	mcpEndpoint    string
 	healthEndpoint string
 	corsOrigins    []string
+	provider       string
 	apiKey         string
 	baseURL        string
-	imageModel     string
+	model          string
+	extraHeaders   map[string]string
+	timeout        time.Duration
 	imageSaveDir   string
 }
 
@@ -37,9 +41,10 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		addr:           defaultHTTPAddr,
 		mcpEndpoint:    defaultMCPEndpoint,
 		healthEndpoint: defaultHealthEndpoint,
-		baseURL:        defaultBaseURL,
-		imageModel:     defaultImageModel,
-		imageSaveDir:   defaultImageSaveDir,
+		provider:       imagegen.DefaultProvider,
+		model:          imagegen.DefaultModel,
+		timeout:        imagegen.DefaultRequestTimeout,
+		imageSaveDir:   imagegen.DefaultSaveDir,
 	}
 
 	if value := strings.TrimSpace(getenv("PIXELSMCP_TRANSPORT")); value != "" {
@@ -61,12 +66,31 @@ func configFromEnv(getenv func(string) string) (config, error) {
 			}
 		}
 	}
+	if value := strings.TrimSpace(getenv("PIXELSMCP_PROVIDER")); value != "" {
+		cfg.provider = value
+	}
 	cfg.apiKey = strings.TrimSpace(getenv("PIXELSMCP_API_KEY"))
 	if value := strings.TrimSpace(getenv("PIXELSMCP_BASE_URL")); value != "" {
 		cfg.baseURL = value
 	}
-	if value := strings.TrimSpace(getenv("PIXELSMCP_IMAGE_MODEL")); value != "" {
-		cfg.imageModel = value
+	if value := strings.TrimSpace(getenv("PIXELSMCP_MODEL")); value != "" {
+		cfg.model = value
+	} else if value := strings.TrimSpace(getenv("PIXELSMCP_IMAGE_MODEL")); value != "" {
+		cfg.model = value
+	}
+	if value := strings.TrimSpace(getenv("PIXELSMCP_EXTRA_HEADERS")); value != "" {
+		headers, err := parseExtraHeaders(value)
+		if err != nil {
+			return config{}, fmt.Errorf("PIXELSMCP_EXTRA_HEADERS: %w", err)
+		}
+		cfg.extraHeaders = headers
+	}
+	if value := strings.TrimSpace(getenv("PIXELSMCP_TIMEOUT")); value != "" {
+		timeout, err := time.ParseDuration(value)
+		if err != nil {
+			return config{}, fmt.Errorf("PIXELSMCP_TIMEOUT: %w", err)
+		}
+		cfg.timeout = timeout
 	}
 	if value := strings.TrimSpace(getenv("PIXELSMCP_IMAGE_SAVE_DIR")); value != "" {
 		cfg.imageSaveDir = value
@@ -90,4 +114,44 @@ func normalizePath(value string) string {
 		return value
 	}
 	return strings.TrimRight(value, "/")
+}
+
+func parseExtraHeaders(value string) (map[string]string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+
+	if strings.HasPrefix(value, "{") {
+		var parsed map[string]string
+		if err := json.Unmarshal([]byte(value), &parsed); err != nil {
+			return nil, err
+		}
+		return parsed, nil
+	}
+
+	headers := make(map[string]string)
+	for _, item := range splitHeaderItems(value) {
+		key, val, ok := strings.Cut(item, "=")
+		if !ok {
+			key, val, ok = strings.Cut(item, ":")
+		}
+		if !ok {
+			return nil, fmt.Errorf("invalid header %q", item)
+		}
+		key = strings.TrimSpace(key)
+		val = strings.TrimSpace(val)
+		if key == "" {
+			return nil, fmt.Errorf("invalid header %q", item)
+		}
+		headers[key] = val
+	}
+
+	return headers, nil
+}
+
+func splitHeaderItems(value string) []string {
+	return strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n'
+	})
 }
