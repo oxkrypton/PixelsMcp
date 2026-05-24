@@ -54,13 +54,14 @@ func runServer(getenv func(string) string) error {
 	}
 
 	imageService, err := imagegen.NewService(imagegen.Config{
-		Provider:     cfg.provider,
-		APIKey:       cfg.apiKey,
-		BaseURL:      cfg.baseURL,
-		Model:        cfg.model,
-		ExtraHeaders: cfg.extraHeaders,
-		Timeout:      cfg.timeout,
-		SaveDir:      cfg.imageSaveDir,
+		Provider:       cfg.provider,
+		APIKey:         cfg.apiKey,
+		BaseURL:        cfg.baseURL,
+		Model:          cfg.model,
+		ReferenceModel: cfg.referenceModel,
+		ExtraHeaders:   cfg.extraHeaders,
+		Timeout:        cfg.timeout,
+		SaveDir:        cfg.imageSaveDir,
 	})
 	if err != nil {
 		return err

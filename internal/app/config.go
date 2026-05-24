@@ -30,6 +30,7 @@ type config struct {
 	apiKey         string
 	baseURL        string
 	model          string
+	referenceModel string
 	extraHeaders   map[string]string
 	timeout        time.Duration
 	imageSaveDir   string
@@ -43,6 +44,7 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		healthEndpoint: defaultHealthEndpoint,
 		provider:       imagegen.DefaultProvider,
 		model:          imagegen.DefaultModel,
+		referenceModel: imagegen.DefaultReferenceModel,
 		timeout:        imagegen.DefaultRequestTimeout,
 		imageSaveDir:   imagegen.DefaultSaveDir,
 	}
@@ -81,6 +83,9 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		cfg.model = value
 	} else if value := strings.TrimSpace(getenv("PIXELSMCP_IMAGE_MODEL")); value != "" {
 		cfg.model = value
+	}
+	if value := strings.TrimSpace(getenv("PIXELSMCP_REFERENCE_MODEL")); value != "" {
+		cfg.referenceModel = value
 	}
 	if value := strings.TrimSpace(getenv("PIXELSMCP_EXTRA_HEADERS")); value != "" {
 		headers, err := parseExtraHeaders(value)

@@ -36,12 +36,13 @@ func runInit(configPath string, stdin io.Reader, stdout, stderr io.Writer, geten
 	}
 
 	provider, err := imagegen.NewProvider(imagegen.ProviderConfig{
-		Provider:     cfg.provider,
-		APIKey:       cfg.apiKey,
-		BaseURL:      cfg.baseURL,
-		Model:        cfg.model,
-		ExtraHeaders: cfg.extraHeaders,
-		Timeout:      cfg.timeout,
+		Provider:       cfg.provider,
+		APIKey:         cfg.apiKey,
+		BaseURL:        cfg.baseURL,
+		Model:          cfg.model,
+		ReferenceModel: cfg.referenceModel,
+		ExtraHeaders:   cfg.extraHeaders,
+		Timeout:        cfg.timeout,
 	})
 	if err != nil {
 		return err
@@ -106,12 +107,13 @@ func interactiveInitConfig(base config, stdin io.Reader, stdout io.Writer) (conf
 	cfg.timeout = timeout
 
 	probe, err := imagegen.NewProvider(imagegen.ProviderConfig{
-		Provider:     cfg.provider,
-		APIKey:       cfg.apiKey,
-		BaseURL:      cfg.baseURL,
-		Model:        cfg.model,
-		ExtraHeaders: cfg.extraHeaders,
-		Timeout:      cfg.timeout,
+		Provider:       cfg.provider,
+		APIKey:         cfg.apiKey,
+		BaseURL:        cfg.baseURL,
+		Model:          cfg.model,
+		ReferenceModel: cfg.referenceModel,
+		ExtraHeaders:   cfg.extraHeaders,
+		Timeout:        cfg.timeout,
 	})
 	if err != nil {
 		return config{}, err
@@ -133,6 +135,11 @@ func interactiveInitConfig(base config, stdin io.Reader, stdout io.Writer) (conf
 		}
 	}
 
+	cfg.referenceModel, err = promptRequiredLine(reader, stdout, "Reference model", cfg.referenceModel)
+	if err != nil {
+		return config{}, err
+	}
+
 	return cfg, nil
 }
 
@@ -151,6 +158,9 @@ func nonInteractiveInitConfig(cfg config) (config, error) {
 	}
 	if strings.TrimSpace(cfg.model) == "" {
 		cfg.model = imagegen.DefaultModel
+	}
+	if strings.TrimSpace(cfg.referenceModel) == "" {
+		cfg.referenceModel = imagegen.DefaultReferenceModel
 	}
 	return cfg, nil
 }
@@ -324,6 +334,7 @@ func serializeConfig(cfg config) map[string]string {
 		"PIXELSMCP_BASE_URL":        cfg.baseURL,
 		"PIXELSMCP_API_KEY":         cfg.apiKey,
 		"PIXELSMCP_MODEL":           cfg.model,
+		"PIXELSMCP_REFERENCE_MODEL": cfg.referenceModel,
 		"PIXELSMCP_EXTRA_HEADERS":   encodeStringMap(cfg.extraHeaders),
 		"PIXELSMCP_TIMEOUT":         cfg.timeout.String(),
 		"PIXELSMCP_IMAGE_SAVE_DIR":  cfg.imageSaveDir,
