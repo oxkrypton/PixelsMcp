@@ -3,7 +3,9 @@ package app
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	mcpgo "github.com/mark3labs/mcp-go/server"
@@ -18,9 +20,29 @@ const (
 )
 
 func Run() error {
+	return Execute(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
+}
+
+func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	_ = godotenv.Load(".env.local", ".env")
 
-	cfg, err := configFromEnv(os.Getenv)
+	if len(args) > 0 {
+		switch strings.ToLower(strings.TrimSpace(args[0])) {
+		case "init", "setup":
+			return runInit(".env.local", stdin, stdout, stderr, os.Getenv, isInteractiveTerminal(stdin))
+		case "help", "-h", "--help":
+			writeUsage(stdout)
+			return nil
+		default:
+			return fmt.Errorf("unknown command %q", args[0])
+		}
+	}
+
+	return runServer(os.Getenv)
+}
+
+func runServer(getenv func(string) string) error {
+	cfg, err := configFromEnv(getenv)
 	if err != nil {
 		return err
 	}
@@ -31,12 +53,19 @@ func Run() error {
 		return errors.New("PIXELSMCP_BASE_URL is required")
 	}
 
-	imageService := imagegen.NewService(imagegen.Config{
-		APIKey:  cfg.apiKey,
-		BaseURL: cfg.baseURL,
-		Model:   cfg.imageModel,
-		SaveDir: cfg.imageSaveDir,
+	imageService, err := imagegen.NewService(imagegen.Config{
+		Provider:     cfg.provider,
+		APIKey:       cfg.apiKey,
+		BaseURL:      cfg.baseURL,
+		Model:        cfg.model,
+		ExtraHeaders: cfg.extraHeaders,
+		Timeout:      cfg.timeout,
+		SaveDir:      cfg.imageSaveDir,
 	})
+	if err != nil {
+		return err
+	}
+
 	mcpServer := server.New(serverName, serverVersion, imageService)
 
 	switch cfg.transport {
@@ -47,4 +76,13 @@ func Run() error {
 	default:
 		return fmt.Errorf("unsupported transport %q", cfg.transport)
 	}
+}
+
+func writeUsage(out io.Writer) {
+	_, _ = fmt.Fprintln(out, "PixelsMcp")
+	_, _ = fmt.Fprintln(out, "")
+	_, _ = fmt.Fprintln(out, "Usage:")
+	_, _ = fmt.Fprintln(out, "  pixelsmcp           Run the MCP server")
+	_, _ = fmt.Fprintln(out, "  pixelsmcp init      Create or update .env.local")
+	_, _ = fmt.Fprintln(out, "  pixelsmcp setup     Alias for init")
 }
