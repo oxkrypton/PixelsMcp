@@ -14,14 +14,15 @@ import (
 )
 
 type Config struct {
-	Provider     string
-	APIKey       string
-	BaseURL      string
-	Model        string
-	ExtraHeaders map[string]string
-	Timeout      time.Duration
-	SaveDir      string
-	Client       *http.Client
+	Provider       string
+	APIKey         string
+	BaseURL        string
+	Model          string
+	ReferenceModel string
+	ExtraHeaders   map[string]string
+	Timeout        time.Duration
+	SaveDir        string
+	Client         *http.Client
 }
 
 type Service struct {
@@ -37,17 +38,18 @@ const (
 )
 
 type Result struct {
-	Prompt       string    `json:"prompt"`
-	Model        string    `json:"model"`
-	ImageURL     string    `json:"image_url"`
-	LocalPath    string    `json:"local_path"`
-	Seed         int64     `json:"seed,omitempty"`
-	InferenceMS  float64   `json:"inference_ms,omitempty"`
-	TraceID      string    `json:"trace_id,omitempty"`
-	ContentType  string    `json:"content_type,omitempty"`
-	Bytes        int64     `json:"bytes,omitempty"`
-	GeneratedAt  time.Time `json:"generated_at"`
-	DownloadedAt time.Time `json:"downloaded_at"`
+	Prompt             string    `json:"prompt"`
+	Model              string    `json:"model"`
+	ImageURL           string    `json:"image_url"`
+	LocalPath          string    `json:"local_path"`
+	Seed               int64     `json:"seed,omitempty"`
+	InferenceMS        float64   `json:"inference_ms,omitempty"`
+	TraceID            string    `json:"trace_id,omitempty"`
+	UsedReferenceImage bool      `json:"used_reference_image,omitempty"`
+	ContentType        string    `json:"content_type,omitempty"`
+	Bytes              int64     `json:"bytes,omitempty"`
+	GeneratedAt        time.Time `json:"generated_at"`
+	DownloadedAt       time.Time `json:"downloaded_at"`
 }
 
 type SpriteSheetOptions struct {
@@ -71,13 +73,14 @@ type SpriteSheetResult struct {
 
 func NewService(cfg Config) (*Service, error) {
 	provider, err := NewProvider(ProviderConfig{
-		Provider:     cfg.Provider,
-		APIKey:       cfg.APIKey,
-		BaseURL:      cfg.BaseURL,
-		Model:        cfg.Model,
-		ExtraHeaders: cfg.ExtraHeaders,
-		Timeout:      cfg.Timeout,
-		Client:       cfg.Client,
+		Provider:       cfg.Provider,
+		APIKey:         cfg.APIKey,
+		BaseURL:        cfg.BaseURL,
+		Model:          cfg.Model,
+		ReferenceModel: cfg.ReferenceModel,
+		ExtraHeaders:   cfg.ExtraHeaders,
+		Timeout:        cfg.Timeout,
+		Client:         cfg.Client,
 	})
 	if err != nil {
 		return nil, err
@@ -182,13 +185,14 @@ func (s *Service) generate(ctx context.Context, prompt string, fileNamePrefix st
 	}
 
 	result := &Result{
-		Prompt:      prompt,
-		Model:       model,
-		ImageURL:    strings.TrimSpace(generated.ImageURL),
-		Seed:        generated.Seed,
-		InferenceMS: generated.InferenceMS,
-		TraceID:     strings.TrimSpace(generated.TraceID),
-		GeneratedAt: time.Now().UTC(),
+		Prompt:             prompt,
+		Model:              model,
+		ImageURL:           strings.TrimSpace(generated.ImageURL),
+		Seed:               generated.Seed,
+		InferenceMS:        generated.InferenceMS,
+		TraceID:            strings.TrimSpace(generated.TraceID),
+		UsedReferenceImage: generated.UsedReferenceImage,
+		GeneratedAt:        time.Now().UTC(),
 	}
 
 	localPath, contentType, bytesWritten, err := s.downloadImage(ctx, result.ImageURL, result, fileNamePrefix)
