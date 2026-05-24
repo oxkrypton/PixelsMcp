@@ -34,13 +34,16 @@ func TestGenerateDownloadsAndSavesImage(t *testing.T) {
 	defer apiSrv.Close()
 
 	saveDir := t.TempDir()
-	svc := NewService(Config{
+	svc, err := NewService(Config{
 		APIKey:  "test-key",
 		BaseURL: apiSrv.URL,
 		Model:   "Custom/Model",
 		SaveDir: saveDir,
 		Client:  apiSrv.Client(),
 	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
 
 	result, err := svc.Generate(context.Background(), "a robot in a garden")
 	if err != nil {
@@ -76,7 +79,13 @@ func TestGenerateDownloadsAndSavesImage(t *testing.T) {
 }
 
 func TestGenerateRejectsEmptyPrompt(t *testing.T) {
-	svc := NewService(Config{APIKey: "test-key"})
+	svc, err := NewService(Config{
+		APIKey:  "test-key",
+		BaseURL: "http://example.invalid",
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
 
 	if _, err := svc.Generate(context.Background(), " "); err == nil {
 		t.Fatal("Generate returned nil error for empty prompt")
@@ -104,13 +113,16 @@ func TestGenerateSpriteSheetBuildsPromptAndSavesImage(t *testing.T) {
 	defer apiSrv.Close()
 
 	saveDir := t.TempDir()
-	svc := NewService(Config{
+	svc, err := NewService(Config{
 		APIKey:  "test-key",
 		BaseURL: apiSrv.URL,
 		Model:   "Custom/Model",
 		SaveDir: saveDir,
 		Client:  apiSrv.Client(),
 	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
 
 	result, err := svc.GenerateSpriteSheet(context.Background(), SpriteSheetOptions{
 		Prompt:     "pixel knight with a blue cape",
@@ -180,12 +192,15 @@ func TestGenerateSpriteSheetDefaultsToHorizontalLayout(t *testing.T) {
 	}))
 	defer apiSrv.Close()
 
-	svc := NewService(Config{
+	svc, err := NewService(Config{
 		APIKey:  "test-key",
 		BaseURL: apiSrv.URL,
 		SaveDir: t.TempDir(),
 		Client:  apiSrv.Client(),
 	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
 
 	result, err := svc.GenerateSpriteSheet(context.Background(), SpriteSheetOptions{
 		Prompt:     "robot mascot",
@@ -205,7 +220,13 @@ func TestGenerateSpriteSheetDefaultsToHorizontalLayout(t *testing.T) {
 }
 
 func TestGenerateSpriteSheetRejectsMissingRequiredFields(t *testing.T) {
-	svc := NewService(Config{APIKey: "test-key"})
+	svc, err := NewService(Config{
+		APIKey:  "test-key",
+		BaseURL: "http://example.invalid",
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
 
 	tests := []struct {
 		name string

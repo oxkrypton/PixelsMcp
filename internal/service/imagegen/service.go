@@ -1,9 +1,7 @@
 package imagegen
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,26 +13,21 @@ import (
 	"time"
 )
 
-const (
-	defaultModel   = "Kwai-Kolors/Kolors"
-	defaultSaveDir = "generated-images"
-	generationPath = "/v1/images/generations"
-)
-
 type Config struct {
-	APIKey  string
-	BaseURL string
-	Model   string
-	SaveDir string
-	Client  *http.Client
+	Provider     string
+	APIKey       string
+	BaseURL      string
+	Model        string
+	ExtraHeaders map[string]string
+	Timeout      time.Duration
+	SaveDir      string
+	Client       *http.Client
 }
 
 type Service struct {
-	apiKey  string
-	baseURL string
-	model   string
-	saveDir string
-	client  *http.Client
+	provider Provider
+	saveDir  string
+	client   *http.Client
 }
 
 type Result struct {
@@ -66,50 +59,30 @@ type SpriteSheetResult struct {
 	Layout       string `json:"layout"`
 }
 
-type generationRequest struct {
-	Model             string  `json:"model"`
-	Prompt            string  `json:"prompt"`
-	ImageSize         string  `json:"image_size,omitempty"`
-	BatchSize         int     `json:"batch_size,omitempty"`
-	NumInferenceSteps int     `json:"num_inference_steps,omitempty"`
-	GuidanceScale     float64 `json:"guidance_scale,omitempty"`
-}
-
-type generationResponse struct {
-	Images []struct {
-		URL string `json:"url"`
-	} `json:"images"`
-	Timings struct {
-		Inference float64 `json:"inference"`
-	} `json:"timings"`
-	Seed int64 `json:"seed"`
-}
-
-func NewService(cfg Config) *Service {
-	client := cfg.Client
-	if client == nil {
-		client = &http.Client{Timeout: 2 * time.Minute}
-	}
-
-	baseURL := strings.TrimSpace(cfg.BaseURL)
-
-	model := strings.TrimSpace(cfg.Model)
-	if model == "" {
-		model = defaultModel
+func NewService(cfg Config) (*Service, error) {
+	provider, err := NewProvider(ProviderConfig{
+		Provider:     cfg.Provider,
+		APIKey:       cfg.APIKey,
+		BaseURL:      cfg.BaseURL,
+		Model:        cfg.Model,
+		ExtraHeaders: cfg.ExtraHeaders,
+		Timeout:      cfg.Timeout,
+		Client:       cfg.Client,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	saveDir := strings.TrimSpace(cfg.SaveDir)
 	if saveDir == "" {
-		saveDir = defaultSaveDir
+		saveDir = DefaultSaveDir
 	}
 
 	return &Service{
-		apiKey:  strings.TrimSpace(cfg.APIKey),
-		baseURL: strings.TrimRight(baseURL, "/"),
-		model:   model,
-		saveDir: saveDir,
-		client:  client,
-	}
+		provider: provider,
+		saveDir:  saveDir,
+		client:   newHTTPClient(cfg.Client, cfg.Timeout),
+	}, nil
 }
 
 func (s *Service) Generate(ctx context.Context, prompt string) (*Result, error) {
@@ -157,64 +130,31 @@ func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptio
 }
 
 func (s *Service) generate(ctx context.Context, prompt string, fileNamePrefix string) (*Result, error) {
-	if s.apiKey == "" {
-		return nil, errors.New("image generation api key is required")
-	}
-	if s.baseURL == "" {
-		return nil, errors.New("image generation base url is required")
-	}
-
-	reqBody := generationRequest{
-		Model:  s.model,
-		Prompt: prompt,
-	}
-
-	rawReq, err := json.Marshal(reqBody)
+	generated, err := s.provider.Generate(ctx, prompt)
 	if err != nil {
-		return nil, fmt.Errorf("marshal generation request: %w", err)
+		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+generationPath, bytes.NewReader(rawReq))
-	if err != nil {
-		return nil, fmt.Errorf("create generation request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+s.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("call image generation api: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		if len(body) > 0 {
-			return nil, fmt.Errorf("image generation request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-		}
-		return nil, fmt.Errorf("image generation request failed: status %d", resp.StatusCode)
-	}
-
-	var genResp generationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&genResp); err != nil {
-		return nil, fmt.Errorf("decode image generation response: %w", err)
-	}
-	if len(genResp.Images) == 0 || strings.TrimSpace(genResp.Images[0].URL) == "" {
+	if strings.TrimSpace(generated.ImageURL) == "" {
 		return nil, errors.New("image generation response did not include an image url")
 	}
 
-	imageURL := strings.TrimSpace(genResp.Images[0].URL)
+	model := strings.TrimSpace(generated.Model)
+	if model == "" {
+		model = DefaultModel
+	}
+
 	result := &Result{
 		Prompt:      prompt,
-		Model:       s.model,
-		ImageURL:    imageURL,
-		Seed:        genResp.Seed,
-		InferenceMS: genResp.Timings.Inference,
-		TraceID:     firstHeaderValue(resp.Header, "X-Trace-Id", "X-Request-Id", "X-Provider-Trace-Id"),
+		Model:       model,
+		ImageURL:    strings.TrimSpace(generated.ImageURL),
+		Seed:        generated.Seed,
+		InferenceMS: generated.InferenceMS,
+		TraceID:     strings.TrimSpace(generated.TraceID),
 		GeneratedAt: time.Now().UTC(),
 	}
 
-	localPath, contentType, bytesWritten, err := s.downloadImage(ctx, imageURL, result, fileNamePrefix)
+	localPath, contentType, bytesWritten, err := s.downloadImage(ctx, result.ImageURL, result, fileNamePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -358,13 +298,4 @@ func buildFileName(prefix, model string, seed int64, ext string) string {
 	}
 
 	return fmt.Sprintf("%s%s-%d-%d%s", prefix, safeModel, time.Now().UTC().UnixNano(), seed, ext)
-}
-
-func firstHeaderValue(header http.Header, names ...string) string {
-	for _, name := range names {
-		if value := strings.TrimSpace(header.Get(name)); value != "" {
-			return value
-		}
-	}
-	return ""
 }
