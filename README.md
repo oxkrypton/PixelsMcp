@@ -13,6 +13,7 @@ Run the service with provider credentials configured on the server:
 PIXELSMCP_API_KEY=your-key \
 PIXELSMCP_BASE_URL=https://api.example.com \
 PIXELSMCP_MODEL=your-model \
+PIXELSMCP_REFERENCE_MODEL=your-model \
 go run ./cmd/pixelsmcp
 ```
 
@@ -83,6 +84,7 @@ deployed MCP URL do not need to set them.
 | `PIXELSMCP_API_KEY` | required | Server-side API key used for image generation. |
 | `PIXELSMCP_BASE_URL` | required | Server-side image generation API base URL. |
 | `PIXELSMCP_MODEL` | `Kwai-Kolors/Kolors` | Default image model used by the server. |
+| `PIXELSMCP_REFERENCE_MODEL` | `Qwen/Qwen-Image-Edit-2509` | Image model used when a request includes `reference_image`. |
 | `PIXELSMCP_EXTRA_HEADERS` | empty | Optional JSON object or key/value list of extra provider headers. |
 | `PIXELSMCP_TIMEOUT` | `2m0s` | HTTP timeout for provider requests. |
 | `PIXELSMCP_IMAGE_SAVE_DIR` | `./generated-images` | Server-side directory where generated images are saved. |
@@ -107,6 +109,7 @@ through your secret manager, systemd drop-in, or service environment:
 PIXELSMCP_API_KEY=your-key
 PIXELSMCP_BASE_URL=https://api.example.com
 PIXELSMCP_MODEL=your-model
+PIXELSMCP_REFERENCE_MODEL=Qwen/Qwen-Image-Edit-2509
 ```
 
 Then start and check the service:
@@ -120,11 +123,17 @@ curl http://127.0.0.1:8080/healthz
 
 ## Tools
 
-- `generate_image`: generates an image from `prompt`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
-- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, optional `frame_width`, `frame_height`, `spacing`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
+- `generate_image`: generates an image from `prompt`, optional `reference_image`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
+- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, optional `reference_image`, optional `frame_width`, `frame_height`, `spacing`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
 
 Use `background_color` for a solid key color like `#00FF00` or `#FF00FF`.
 Sprite sheets default to 64x64 frames with 2px spacing and a light-gray background if you omit those geometry fields and `background_color`.
+Use `reference_image` only when you want the server to route the request through
+`PIXELSMCP_REFERENCE_MODEL`; it must be an http(s) URL or a `data:image/...`
+base64 URL. Do not set the default `PIXELSMCP_MODEL` to a reference-only edit
+model if you still want plain text-to-image requests to work. For SiliconFlow's
+Qwen edit models, `image_size` and `guidance_scale` are omitted automatically
+because those fields are not supported by those models.
 
 Example image arguments:
 
@@ -132,6 +141,7 @@ Example image arguments:
 {
   "prompt": "portrait of a cyberpunk engineer",
   "background_color": "#FF00FF",
+  "reference_image": "https://example.com/reference.png",
   "image_size": "1024x1024",
   "guidance_scale": 7.5,
   "num_inference_steps": 28,
@@ -152,6 +162,7 @@ Example sprite sheet arguments:
   "frame_height": 64,
   "spacing": 2,
   "background_color": "#00FF00",
+  "reference_image": "data:image/png;base64,...",
   "image_size": "1024x1024",
   "guidance_scale": 7.5,
   "num_inference_steps": 28,
