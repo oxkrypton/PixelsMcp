@@ -15,8 +15,8 @@ func TestConfigFromEnvDefaults(t *testing.T) {
 		t.Fatalf("configFromEnv returned error: %v", err)
 	}
 
-	if cfg.transport != transportStdio {
-		t.Fatalf("transport = %q, want %q", cfg.transport, transportStdio)
+	if cfg.transport != transportHTTP {
+		t.Fatalf("transport = %q, want %q", cfg.transport, transportHTTP)
 	}
 	if cfg.addr != defaultHTTPAddr {
 		t.Fatalf("addr = %q, want %q", cfg.addr, defaultHTTPAddr)
@@ -41,6 +41,22 @@ func TestConfigFromEnvDefaults(t *testing.T) {
 	}
 	if cfg.imageSaveDir != imagegen.DefaultSaveDir {
 		t.Fatalf("imageSaveDir = %q, want %q", cfg.imageSaveDir, imagegen.DefaultSaveDir)
+	}
+}
+
+func TestConfigFromEnvAllowsDeveloperStdioTransport(t *testing.T) {
+	cfg, err := configFromEnv(func(key string) string {
+		if key == "PIXELSMCP_TRANSPORT" {
+			return "stdio"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("configFromEnv returned error: %v", err)
+	}
+
+	if cfg.transport != transportStdio {
+		t.Fatalf("transport = %q, want %q", cfg.transport, transportStdio)
 	}
 }
 
@@ -102,6 +118,22 @@ func TestConfigFromEnvHTTP(t *testing.T) {
 	wantOrigins := []string{"https://example.com", "https://app.example.com"}
 	if !reflect.DeepEqual(cfg.corsOrigins, wantOrigins) {
 		t.Fatalf("corsOrigins = %#v, want %#v", cfg.corsOrigins, wantOrigins)
+	}
+}
+
+func TestWriteUsageDescribesHTTPDefaultAndDeveloperSetup(t *testing.T) {
+	var out strings.Builder
+	writeUsage(&out)
+
+	content := out.String()
+	for _, want := range []string{
+		"pixelsmcp           Run the HTTP MCP service",
+		"pixelsmcp init      Create or update developer .env.local",
+		"Set PIXELSMCP_TRANSPORT=stdio only for local developer MCP debugging.",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("usage missing %q:\n%s", want, content)
+		}
 	}
 }
 

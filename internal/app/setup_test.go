@@ -61,6 +61,7 @@ func TestRunInitInteractiveWritesAndVerifiesConfig(t *testing.T) {
 	content := string(data)
 	for _, want := range []string{
 		`PIXELSMCP_PROVIDER="openai-compatible"`,
+		`PIXELSMCP_TRANSPORT="http"`,
 		`PIXELSMCP_BASE_URL="` + apiSrv.URL + `"`,
 		`PIXELSMCP_API_KEY="test-key"`,
 		`PIXELSMCP_MODEL="Custom/Model"`,
@@ -109,6 +110,7 @@ func TestRunInitNonInteractiveWritesConfig(t *testing.T) {
 	content := string(data)
 	for _, want := range []string{
 		`PIXELSMCP_PROVIDER="openai-compatible"`,
+		`PIXELSMCP_TRANSPORT="http"`,
 		`PIXELSMCP_BASE_URL="` + apiSrv.URL + `"`,
 		`PIXELSMCP_API_KEY="test-key"`,
 		`PIXELSMCP_MODEL="Custom/Model"`,
