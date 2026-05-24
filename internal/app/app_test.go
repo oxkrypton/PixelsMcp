@@ -36,6 +36,9 @@ func TestConfigFromEnvDefaults(t *testing.T) {
 	if cfg.model != imagegen.DefaultModel {
 		t.Fatalf("model = %q, want %q", cfg.model, imagegen.DefaultModel)
 	}
+	if cfg.referenceModel != imagegen.DefaultReferenceModel {
+		t.Fatalf("referenceModel = %q, want %q", cfg.referenceModel, imagegen.DefaultReferenceModel)
+	}
 	if cfg.timeout != imagegen.DefaultRequestTimeout {
 		t.Fatalf("timeout = %v, want %v", cfg.timeout, imagegen.DefaultRequestTimeout)
 	}
@@ -71,6 +74,7 @@ func TestConfigFromEnvHTTP(t *testing.T) {
 		"PIXELSMCP_API_KEY":         "test-key",
 		"PIXELSMCP_BASE_URL":        "https://example.invalid",
 		"PIXELSMCP_MODEL":           "Custom/Model",
+		"PIXELSMCP_REFERENCE_MODEL": "Reference/Model",
 		"PIXELSMCP_EXTRA_HEADERS":   `{"X-Client":"PixelsMcp","X-Env":"test"}`,
 		"PIXELSMCP_TIMEOUT":         "45s",
 		"PIXELSMCP_IMAGE_SAVE_DIR":  "/tmp/pixelsmcp",
@@ -104,6 +108,9 @@ func TestConfigFromEnvHTTP(t *testing.T) {
 	}
 	if cfg.model != "Custom/Model" {
 		t.Fatalf("model = %q, want Custom/Model", cfg.model)
+	}
+	if cfg.referenceModel != "Reference/Model" {
+		t.Fatalf("referenceModel = %q, want Reference/Model", cfg.referenceModel)
 	}
 	if cfg.timeout != 45*time.Second {
 		t.Fatalf("timeout = %v, want 45s", cfg.timeout)

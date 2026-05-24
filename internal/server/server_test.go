@@ -43,6 +43,7 @@ func TestToolSchemasExposeCommonGenerationFields(t *testing.T) {
 		"num_inference_steps",
 		"seed",
 		"negative_prompt",
+		"reference_image",
 	})
 
 	spriteSchema := rawToolSchema(t, newGenerateSpriteSheetTool())
@@ -60,6 +61,7 @@ func TestToolSchemasExposeCommonGenerationFields(t *testing.T) {
 		"num_inference_steps",
 		"seed",
 		"negative_prompt",
+		"reference_image",
 	})
 }
 

@@ -165,3 +165,72 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 		t.Fatalf("local path = %q, want file under %q", parsed.LocalPath, saveDir)
 	}
 }
+
+func TestGenerateImageToolSupportsReferenceImage(t *testing.T) {
+	var capturedBody map[string]any
+
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			if err := json.NewDecoder(r.Body).Decode(&capturedBody); err != nil {
+				t.Fatalf("decode generation request: %v", err)
+			}
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/images/1.png"}],"seed":99}`, nil), nil
+		case "/images/1.png":
+			return newTestResponse(http.StatusOK, "fake-png", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
+		default:
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
+		}
+	})
+
+	service, err := imagegen.NewService(imagegen.Config{
+		APIKey:         "test-key",
+		BaseURL:        "http://example.invalid",
+		Model:          "Text/Model",
+		ReferenceModel: "Reference/Model",
+		SaveDir:        t.TempDir(),
+		Client:         client,
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	handler := &generateImageToolHandler{service: service}
+	wrapped := mcp.NewTypedToolHandler(handler.handle)
+
+	result, err := wrapped(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "generate_image",
+			Arguments: map[string]any{
+				"prompt":          "turn the reference into a game item",
+				"image_size":      "1024x1024",
+				"reference_image": "https://example.invalid/reference.png",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handler returned error result: %+v", result)
+	}
+
+	parsed, ok := result.StructuredContent.(*imagegen.Result)
+	if !ok {
+		t.Fatalf("structured content type = %T, want *imagegen.Result", result.StructuredContent)
+	}
+	if capturedBody["model"] != "Reference/Model" {
+		t.Fatalf("generation model = %#v, want Reference/Model", capturedBody["model"])
+	}
+	if capturedBody["image"] != "https://example.invalid/reference.png" {
+		t.Fatalf("reference image = %#v, want reference url", capturedBody["image"])
+	}
+	if _, ok := capturedBody["image_size"]; ok {
+		t.Fatalf("image_size = %#v, want omitted", capturedBody["image_size"])
+	}
+	if !parsed.UsedReferenceImage {
+		t.Fatal("usedReferenceImage = false, want true")
+	}
+}

@@ -293,6 +293,64 @@ func TestGenerateSpriteSheetBuildsPromptAndSavesImage(t *testing.T) {
 	}
 }
 
+func TestGenerateSpriteSheetWithReferenceImageUsesReferenceModel(t *testing.T) {
+	var gotRequest openAICompatibleGenerationRequest
+
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/sprite.png"}],"seed":456}`, nil), nil
+		case "/sprite.png":
+			return newTestResponse(http.StatusOK, "SPRITEDATA", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
+		default:
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
+		}
+	})
+
+	svc, err := NewService(Config{
+		APIKey:         "test-key",
+		BaseURL:        "http://example.invalid",
+		Model:          "Text/Model",
+		ReferenceModel: "Reference/Model",
+		SaveDir:        t.TempDir(),
+		Client:         client,
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	result, err := svc.GenerateSpriteSheet(context.Background(), SpriteSheetOptions{
+		Prompt:     "robot mascot",
+		Action:     "idle",
+		FrameCount: 4,
+		Generation: GenerationOptions{
+			ImageSize:      "1024x1024",
+			ReferenceImage: "data:image/png;base64,AAA",
+		},
+	})
+	if err != nil {
+		t.Fatalf("GenerateSpriteSheet returned error: %v", err)
+	}
+
+	if gotRequest.Model != "Reference/Model" {
+		t.Fatalf("model = %q, want Reference/Model", gotRequest.Model)
+	}
+	if gotRequest.Image != "data:image/png;base64,AAA" {
+		t.Fatalf("image = %q, want data URL", gotRequest.Image)
+	}
+	if gotRequest.ImageSize != "" {
+		t.Fatalf("imageSize = %q, want omitted", gotRequest.ImageSize)
+	}
+	if !result.UsedReferenceImage {
+		t.Fatal("UsedReferenceImage = false, want true")
+	}
+}
+
 func TestGenerateSpriteSheetBuildsBackgroundColorPrompt(t *testing.T) {
 	var gotRequest openAICompatibleGenerationRequest
 

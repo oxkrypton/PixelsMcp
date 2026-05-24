@@ -65,6 +65,7 @@ func TestRunInitInteractiveWritesAndVerifiesConfig(t *testing.T) {
 		`PIXELSMCP_BASE_URL="` + apiSrv.URL + `"`,
 		`PIXELSMCP_API_KEY="test-key"`,
 		`PIXELSMCP_MODEL="Custom/Model"`,
+		`PIXELSMCP_REFERENCE_MODEL="Qwen/Qwen-Image-Edit-2509"`,
 		`PIXELSMCP_EXTRA_HEADERS="{\"X-Client\":\"PixelsMcp\"}"`,
 		`PIXELSMCP_TIMEOUT="15s"`,
 	} {
@@ -86,13 +87,14 @@ func TestRunInitNonInteractiveWritesConfig(t *testing.T) {
 	defer apiSrv.Close()
 
 	env := map[string]string{
-		"PIXELSMCP_PROVIDER":       "openai-compatible",
-		"PIXELSMCP_API_KEY":        "test-key",
-		"PIXELSMCP_BASE_URL":       apiSrv.URL,
-		"PIXELSMCP_MODEL":          "Custom/Model",
-		"PIXELSMCP_EXTRA_HEADERS":  `{"X-Client":"PixelsMcp"}`,
-		"PIXELSMCP_TIMEOUT":        "20s",
-		"PIXELSMCP_IMAGE_SAVE_DIR": "/tmp/pixelsmcp",
+		"PIXELSMCP_PROVIDER":        "openai-compatible",
+		"PIXELSMCP_API_KEY":         "test-key",
+		"PIXELSMCP_BASE_URL":        apiSrv.URL,
+		"PIXELSMCP_MODEL":           "Custom/Model",
+		"PIXELSMCP_REFERENCE_MODEL": "Reference/Model",
+		"PIXELSMCP_EXTRA_HEADERS":   `{"X-Client":"PixelsMcp"}`,
+		"PIXELSMCP_TIMEOUT":         "20s",
+		"PIXELSMCP_IMAGE_SAVE_DIR":  "/tmp/pixelsmcp",
 	}
 
 	dir := t.TempDir()
@@ -114,6 +116,7 @@ func TestRunInitNonInteractiveWritesConfig(t *testing.T) {
 		`PIXELSMCP_BASE_URL="` + apiSrv.URL + `"`,
 		`PIXELSMCP_API_KEY="test-key"`,
 		`PIXELSMCP_MODEL="Custom/Model"`,
+		`PIXELSMCP_REFERENCE_MODEL="Reference/Model"`,
 		`PIXELSMCP_EXTRA_HEADERS="{\"X-Client\":\"PixelsMcp\"}"`,
 		`PIXELSMCP_TIMEOUT="20s"`,
 		`PIXELSMCP_IMAGE_SAVE_DIR="/tmp/pixelsmcp"`,

@@ -151,10 +151,113 @@ func TestOpenAICompatibleProviderGenerateOmitsUnsetOptions(t *testing.T) {
 		t.Fatalf("Generate returned error: %v", err)
 	}
 
-	for _, key := range []string{"image_size", "guidance_scale", "num_inference_steps", "seed", "negative_prompt", "batch_size"} {
+	for _, key := range []string{"image", "image_size", "guidance_scale", "num_inference_steps", "seed", "negative_prompt", "batch_size"} {
 		if _, ok := captured[key]; ok {
 			t.Fatalf("%s = %#v, want omitted", key, captured[key])
 		}
+	}
+}
+
+func TestOpenAICompatibleProviderGenerateWithReferenceImage(t *testing.T) {
+	var captured map[string]any
+
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case openAIGenerationPath:
+			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"https://example.invalid/image.png"}],"seed":321}`, nil), nil
+		default:
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
+		}
+	})
+
+	provider, err := NewProvider(ProviderConfig{
+		Provider:       ProviderOpenAICompatible,
+		APIKey:         "test-key",
+		BaseURL:        "http://example.invalid",
+		Model:          "Text/Model",
+		ReferenceModel: "Reference/Model",
+		Client:         client,
+	})
+	if err != nil {
+		t.Fatalf("NewProvider returned error: %v", err)
+	}
+
+	result, err := provider.Generate(context.Background(), "make it cinematic", GenerationOptions{
+		ImageSize:      "1024x1024",
+		GuidanceScale:  7.5,
+		ReferenceImage: "https://example.invalid/reference.png",
+	})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	if got, ok := captured["model"].(string); !ok || got != "Reference/Model" {
+		t.Fatalf("model = %#v, want Reference/Model", captured["model"])
+	}
+	if got, ok := captured["image"].(string); !ok || got != "https://example.invalid/reference.png" {
+		t.Fatalf("image = %#v, want reference image", captured["image"])
+	}
+	if _, ok := captured["image_size"]; ok {
+		t.Fatalf("image_size = %#v, want omitted for reference image model", captured["image_size"])
+	}
+	if _, ok := captured["guidance_scale"]; ok {
+		t.Fatalf("guidance_scale = %#v, want omitted for reference image model", captured["guidance_scale"])
+	}
+	if result.Model != "Reference/Model" {
+		t.Fatalf("result model = %q, want Reference/Model", result.Model)
+	}
+	if !result.UsedReferenceImage {
+		t.Fatal("UsedReferenceImage = false, want true")
+	}
+}
+
+func TestOpenAICompatibleProviderRequiresReferenceModelForReferenceImage(t *testing.T) {
+	provider, err := NewProvider(ProviderConfig{
+		Provider: ProviderOpenAICompatible,
+		APIKey:   "test-key",
+		BaseURL:  "http://example.invalid",
+		Model:    "Text/Model",
+		Client: newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+			t.Fatal("unexpected provider request")
+			return nil, nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewProvider returned error: %v", err)
+	}
+
+	_, err = provider.Generate(context.Background(), "make it cinematic", GenerationOptions{
+		ReferenceImage: "https://example.invalid/reference.png",
+	})
+	if err == nil || !strings.Contains(err.Error(), "reference image model") {
+		t.Fatalf("Generate error = %v, want missing reference model error", err)
+	}
+}
+
+func TestOpenAICompatibleProviderRejectsUnsupportedReferenceImage(t *testing.T) {
+	provider, err := NewProvider(ProviderConfig{
+		Provider:       ProviderOpenAICompatible,
+		APIKey:         "test-key",
+		BaseURL:        "http://example.invalid",
+		Model:          "Text/Model",
+		ReferenceModel: "Reference/Model",
+		Client: newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+			t.Fatal("unexpected provider request")
+			return nil, nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewProvider returned error: %v", err)
+	}
+
+	_, err = provider.Generate(context.Background(), "make it cinematic", GenerationOptions{
+		ReferenceImage: "/tmp/reference.png",
+	})
+	if err == nil || !strings.Contains(err.Error(), "http(s) URL or data:image") {
+		t.Fatalf("Generate error = %v, want unsupported reference image error", err)
 	}
 }
 
