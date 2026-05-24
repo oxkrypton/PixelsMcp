@@ -11,7 +11,7 @@ import (
 )
 
 func TestGenerateDownloadsAndSavesImage(t *testing.T) {
-	var gotRequest generationRequest
+	var gotRequest openAICompatibleGenerationRequest
 
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -93,7 +93,7 @@ func TestGenerateRejectsEmptyPrompt(t *testing.T) {
 }
 
 func TestGenerateSpriteSheetBuildsPromptAndSavesImage(t *testing.T) {
-	var gotRequest generationRequest
+	var gotRequest openAICompatibleGenerationRequest
 
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -174,7 +174,7 @@ func TestGenerateSpriteSheetBuildsPromptAndSavesImage(t *testing.T) {
 }
 
 func TestGenerateSpriteSheetDefaultsToHorizontalLayout(t *testing.T) {
-	var gotRequest generationRequest
+	var gotRequest openAICompatibleGenerationRequest
 
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

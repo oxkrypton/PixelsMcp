@@ -50,9 +50,6 @@ type openAICompatibleModelsResponse struct {
 	} `json:"data"`
 }
 
-type generationRequest = openAICompatibleGenerationRequest
-type generationResponse = openAICompatibleGenerationResponse
-
 func newOpenAICompatibleProvider(cfg ProviderConfig) (*openAICompatibleProvider, error) {
 	apiKey := strings.TrimSpace(cfg.APIKey)
 	if apiKey == "" {
@@ -175,28 +172,28 @@ func (p *openAICompatibleProvider) Validate(ctx context.Context) error {
 		return errors.New("image generation model is required")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+openAIModelsPath, nil)
-	if err != nil {
-		return fmt.Errorf("create provider validation request: %w", err)
-	}
-	p.applyHeaders(req)
-
-	resp, err := p.client.Do(req)
+	models, err := p.ListModels(ctx)
 	if err != nil {
 		return fmt.Errorf("validate image generation provider: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return responseError("provider validation request failed", resp)
+	if len(models) == 0 {
+		return errors.New("provider validation failed: model list is empty")
+	}
+	if !containsModel(models, model) {
+		return fmt.Errorf("provider validation failed: model %q was not returned by provider", model)
 	}
 
-	var modelResp openAICompatibleModelsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&modelResp); err != nil {
-		return fmt.Errorf("decode provider validation response: %w", err)
-	}
-	_ = modelResp
 	return nil
+}
+
+func containsModel(models []string, target string) bool {
+	target = strings.TrimSpace(target)
+	for _, model := range models {
+		if strings.TrimSpace(model) == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *openAICompatibleProvider) applyHeaders(req *http.Request) {

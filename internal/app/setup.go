@@ -137,10 +137,12 @@ func interactiveInitConfig(base config, stdin io.Reader, stdout io.Writer) (conf
 }
 
 func nonInteractiveInitConfig(cfg config) (config, error) {
-	cfg.provider = normalizeSupportedProvider(cfg.provider)
-	if cfg.provider == "" {
-		return config{}, errors.New("unsupported provider for non-interactive init")
+	rawProvider := cfg.provider
+	provider := normalizeSupportedProvider(rawProvider)
+	if provider == "" {
+		return config{}, fmt.Errorf("unsupported provider %q for non-interactive init", rawProvider)
 	}
+	cfg.provider = provider
 	if strings.TrimSpace(cfg.baseURL) == "" {
 		return config{}, errors.New("PIXELSMCP_BASE_URL is required for non-interactive init")
 	}
@@ -313,18 +315,18 @@ func isInteractiveTerminal(stdin io.Reader) bool {
 
 func serializeConfig(cfg config) map[string]string {
 	values := map[string]string{
-		"PIXELSMCP_TRANSPORT":        string(cfg.transport),
-		"PIXELSMCP_ADDR":             cfg.addr,
-		"PIXELSMCP_ENDPOINT":         cfg.mcpEndpoint,
-		"PIXELSMCP_HEALTH_ENDPOINT":  cfg.healthEndpoint,
-		"PIXELSMCP_CORS_ORIGINS":     strings.Join(cfg.corsOrigins, ","),
-		"PIXELSMCP_PROVIDER":         cfg.provider,
-		"PIXELSMCP_BASE_URL":         cfg.baseURL,
-		"PIXELSMCP_API_KEY":          cfg.apiKey,
-		"PIXELSMCP_MODEL":            cfg.model,
-		"PIXELSMCP_EXTRA_HEADERS":    encodeStringMap(cfg.extraHeaders),
-		"PIXELSMCP_TIMEOUT":          cfg.timeout.String(),
-		"PIXELSMCP_IMAGE_SAVE_DIR":   cfg.imageSaveDir,
+		"PIXELSMCP_TRANSPORT":       string(cfg.transport),
+		"PIXELSMCP_ADDR":            cfg.addr,
+		"PIXELSMCP_ENDPOINT":        cfg.mcpEndpoint,
+		"PIXELSMCP_HEALTH_ENDPOINT": cfg.healthEndpoint,
+		"PIXELSMCP_CORS_ORIGINS":    strings.Join(cfg.corsOrigins, ","),
+		"PIXELSMCP_PROVIDER":        cfg.provider,
+		"PIXELSMCP_BASE_URL":        cfg.baseURL,
+		"PIXELSMCP_API_KEY":         cfg.apiKey,
+		"PIXELSMCP_MODEL":           cfg.model,
+		"PIXELSMCP_EXTRA_HEADERS":   encodeStringMap(cfg.extraHeaders),
+		"PIXELSMCP_TIMEOUT":         cfg.timeout.String(),
+		"PIXELSMCP_IMAGE_SAVE_DIR":  cfg.imageSaveDir,
 	}
 
 	return values

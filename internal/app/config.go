@@ -13,7 +13,7 @@ type transport string
 
 const (
 	transportStdio transport = "stdio"
-	transportHTTP   transport = "http"
+	transportHTTP  transport = "http"
 
 	defaultHTTPAddr       = ":8080"
 	defaultMCPEndpoint    = "/mcp"
@@ -67,7 +67,11 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		}
 	}
 	if value := strings.TrimSpace(getenv("PIXELSMCP_PROVIDER")); value != "" {
-		cfg.provider = value
+		provider := normalizeSupportedProvider(value)
+		if provider == "" {
+			return config{}, fmt.Errorf("PIXELSMCP_PROVIDER must be one of %q or %q, got %q", imagegen.ProviderOpenAICompatible, "openai", value)
+		}
+		cfg.provider = provider
 	}
 	cfg.apiKey = strings.TrimSpace(getenv("PIXELSMCP_API_KEY"))
 	if value := strings.TrimSpace(getenv("PIXELSMCP_BASE_URL")); value != "" {

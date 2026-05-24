@@ -121,6 +121,32 @@ func TestOpenAICompatibleProviderListModelsAndValidate(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatibleProviderValidateRejectsMissingModel(t *testing.T) {
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case openAIModelsPath:
+			_, _ = w.Write([]byte(`{"data":[{"id":"alpha"},{"id":"Other/Model"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer apiSrv.Close()
+
+	provider, err := NewProvider(ProviderConfig{
+		APIKey:  "test-key",
+		BaseURL: apiSrv.URL,
+		Model:   "Custom/Model",
+		Client:  apiSrv.Client(),
+	})
+	if err != nil {
+		t.Fatalf("NewProvider returned error: %v", err)
+	}
+
+	if err := provider.Validate(context.Background()); err == nil || !strings.Contains(err.Error(), "Custom/Model") {
+		t.Fatalf("Validate error = %v, want missing model error", err)
+	}
+}
+
 func TestOpenAICompatibleProviderReturnsStatusError(t *testing.T) {
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "provider boom", http.StatusServiceUnavailable)

@@ -122,6 +122,20 @@ func TestRunInitNonInteractiveWritesConfig(t *testing.T) {
 	}
 }
 
+func TestNonInteractiveInitConfigRejectsUnsupportedProviderWithValue(t *testing.T) {
+	_, err := nonInteractiveInitConfig(config{
+		provider: "unsupported",
+		apiKey:   "test-key",
+		baseURL:  "https://example.invalid",
+	})
+	if err == nil {
+		t.Fatal("nonInteractiveInitConfig returned nil error")
+	}
+	if !strings.Contains(err.Error(), "unsupported") {
+		t.Fatalf("error = %v, want provider value", err)
+	}
+}
+
 func TestRunInitRollsBackOnValidationFailure(t *testing.T) {
 	var modelListCalls int
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

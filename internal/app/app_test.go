@@ -2,6 +2,7 @@ package app
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,8 +18,20 @@ func TestConfigFromEnvDefaults(t *testing.T) {
 	if cfg.transport != transportStdio {
 		t.Fatalf("transport = %q, want %q", cfg.transport, transportStdio)
 	}
+	if cfg.addr != defaultHTTPAddr {
+		t.Fatalf("addr = %q, want %q", cfg.addr, defaultHTTPAddr)
+	}
+	if cfg.mcpEndpoint != defaultMCPEndpoint {
+		t.Fatalf("mcpEndpoint = %q, want %q", cfg.mcpEndpoint, defaultMCPEndpoint)
+	}
+	if cfg.healthEndpoint != defaultHealthEndpoint {
+		t.Fatalf("healthEndpoint = %q, want %q", cfg.healthEndpoint, defaultHealthEndpoint)
+	}
 	if cfg.provider != imagegen.DefaultProvider {
 		t.Fatalf("provider = %q, want %q", cfg.provider, imagegen.DefaultProvider)
+	}
+	if cfg.baseURL != "" {
+		t.Fatalf("baseURL = %q, want empty", cfg.baseURL)
 	}
 	if cfg.model != imagegen.DefaultModel {
 		t.Fatalf("model = %q, want %q", cfg.model, imagegen.DefaultModel)
@@ -92,6 +105,22 @@ func TestConfigFromEnvHTTP(t *testing.T) {
 	}
 }
 
+func TestConfigFromEnvModelPrefersCurrentNameOverLegacyName(t *testing.T) {
+	env := map[string]string{
+		"PIXELSMCP_MODEL":       "Current/Model",
+		"PIXELSMCP_IMAGE_MODEL": "Legacy/Model",
+	}
+
+	cfg, err := configFromEnv(func(key string) string { return env[key] })
+	if err != nil {
+		t.Fatalf("configFromEnv returned error: %v", err)
+	}
+
+	if cfg.model != "Current/Model" {
+		t.Fatalf("model = %q, want Current/Model", cfg.model)
+	}
+}
+
 func TestConfigFromEnvModelFallbackToLegacyName(t *testing.T) {
 	env := map[string]string{
 		"PIXELSMCP_IMAGE_MODEL": "Legacy/Model",
@@ -104,6 +133,21 @@ func TestConfigFromEnvModelFallbackToLegacyName(t *testing.T) {
 
 	if cfg.model != "Legacy/Model" {
 		t.Fatalf("model = %q, want Legacy/Model", cfg.model)
+	}
+}
+
+func TestConfigFromEnvRejectsInvalidProvider(t *testing.T) {
+	_, err := configFromEnv(func(key string) string {
+		if key == "PIXELSMCP_PROVIDER" {
+			return "unsupported"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatal("configFromEnv returned nil error")
+	}
+	if !strings.Contains(err.Error(), "unsupported") {
+		t.Fatalf("error = %v, want provider value", err)
 	}
 }
 
@@ -142,4 +186,3 @@ func TestConfigFromEnvRejectsSharedEndpoints(t *testing.T) {
 		t.Fatal("configFromEnv returned nil error")
 	}
 }
-
