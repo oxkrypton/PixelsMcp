@@ -87,12 +87,21 @@ func NewService(cfg Config) (*Service, error) {
 }
 
 func (s *Service) Generate(ctx context.Context, prompt string) (*Result, error) {
+	return s.GenerateWithOptions(ctx, prompt, GenerationOptions{})
+}
+
+func (s *Service) GenerateWithOptions(ctx context.Context, prompt string, generation GenerationOptions) (*Result, error) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
 		return nil, errors.New("prompt is required")
 	}
 
-	return s.generate(ctx, prompt, "", GenerationOptions{})
+	prompt, err := buildPromptWithBackground(prompt, generation.BackgroundColor, "")
+	if err != nil {
+		return nil, err
+	}
+
+	return s.generate(ctx, prompt, "", generation)
 }
 
 func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptions) (*SpriteSheetResult, error) {
@@ -116,6 +125,11 @@ func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptio
 	}
 
 	generationPrompt := buildSpriteSheetPrompt(sourcePrompt, action, opts.FrameCount, layout)
+	generationPrompt, err := buildPromptWithBackground(generationPrompt, opts.Generation.BackgroundColor, "Use a solid light-gray background.")
+	if err != nil {
+		return nil, err
+	}
+
 	result, err := s.generate(ctx, generationPrompt, "sprite-sheet", opts.Generation)
 	if err != nil {
 		return nil, err
@@ -232,7 +246,6 @@ Use pixel-perfect rendering with crisp edges, nearest-neighbor filtering, and a 
 Keep the same character design, proportions, style, camera angle, lighting, and scale in every frame.
 Show clear incremental motion across frames.
 Leave 2px spacing between frames.
-Use a solid light-gray background.
 Do not add text labels, frame numbers, UI elements, watermarks, or decorative borders.`,
 		sourcePrompt,
 		action,
@@ -240,6 +253,62 @@ Do not add text labels, frame numbers, UI elements, watermarks, or decorative bo
 		layout,
 		layoutInstruction,
 	)
+}
+
+func buildPromptWithBackground(prompt, backgroundColor, defaultInstruction string) (string, error) {
+	instruction, err := buildBackgroundInstruction(backgroundColor)
+	if err != nil {
+		return "", err
+	}
+	if instruction == "" {
+		instruction = strings.TrimSpace(defaultInstruction)
+	}
+	if instruction == "" {
+		return prompt, nil
+	}
+
+	return prompt + "\n\n" + instruction, nil
+}
+
+func buildBackgroundInstruction(backgroundColor string) (string, error) {
+	color, err := normalizeBackgroundColor(backgroundColor)
+	if err != nil {
+		return "", err
+	}
+	if color == "" {
+		return "", nil
+	}
+
+	return fmt.Sprintf("Use a SOLID %s background (%s) with absolutely no gradients, no transparency.", color, color), nil
+}
+
+func normalizeBackgroundColor(value string) (string, error) {
+	color := strings.ToUpper(strings.TrimSpace(value))
+	if color == "" {
+		return "", nil
+	}
+	if len(color) != 7 || color[0] != '#' {
+		return "", errors.New("background_color must be in #RRGGBB format")
+	}
+	for _, r := range color[1:] {
+		if !isHexDigit(r) {
+			return "", errors.New("background_color must be in #RRGGBB format")
+		}
+	}
+	return color, nil
+}
+
+func isHexDigit(r rune) bool {
+	switch {
+	case r >= '0' && r <= '9':
+		return true
+	case r >= 'a' && r <= 'f':
+		return true
+	case r >= 'A' && r <= 'F':
+		return true
+	default:
+		return false
+	}
 }
 
 func spriteSheetLayoutInstruction(layout string) string {

@@ -30,6 +30,7 @@ type GenerationOptions struct {
 	ImageSize         string
 	GuidanceScale     float64
 	NumInferenceSteps int
+	BackgroundColor   string
 }
 
 type Provider interface {
