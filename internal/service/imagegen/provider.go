@@ -26,9 +26,15 @@ type ProviderConfig struct {
 	Client       *http.Client
 }
 
+type GenerationOptions struct {
+	ImageSize         string
+	GuidanceScale     float64
+	NumInferenceSteps int
+}
+
 type Provider interface {
 	Name() string
-	Generate(ctx context.Context, prompt string) (*GenerationResult, error)
+	Generate(ctx context.Context, prompt string, opts GenerationOptions) (*GenerationResult, error)
 	ListModels(ctx context.Context) ([]string, error)
 	Validate(ctx context.Context) error
 }

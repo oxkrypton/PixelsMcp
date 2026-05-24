@@ -79,15 +79,18 @@ func (p *openAICompatibleProvider) Name() string {
 	return ProviderOpenAICompatible
 }
 
-func (p *openAICompatibleProvider) Generate(ctx context.Context, prompt string) (*GenerationResult, error) {
+func (p *openAICompatibleProvider) Generate(ctx context.Context, prompt string, opts GenerationOptions) (*GenerationResult, error) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
 		return nil, errors.New("prompt is required")
 	}
 
 	reqBody := openAICompatibleGenerationRequest{
-		Model:  p.model,
-		Prompt: prompt,
+		Model:             p.model,
+		Prompt:            prompt,
+		ImageSize:         strings.TrimSpace(opts.ImageSize),
+		NumInferenceSteps: opts.NumInferenceSteps,
+		GuidanceScale:     opts.GuidanceScale,
 	}
 
 	rawReq, err := json.Marshal(reqBody)
