@@ -2,4 +2,4 @@
 /pixelsmcp
 .env
 .env.local
-.mcp.json
+/generated-images
