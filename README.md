@@ -121,7 +121,7 @@ curl http://127.0.0.1:8080/healthz
 ## Tools
 
 - `generate_image`: generates an image from `prompt`, saves it on the server, and returns the file information.
-- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, and `layout`, saves it on the server, and returns the file information.
+- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, and optional tuning args, saves it on the server, and returns the file information.
 
 Example sprite sheet arguments:
 
@@ -130,10 +130,14 @@ Example sprite sheet arguments:
   "prompt": "pixel art knight with a blue cape",
   "action": "walk",
   "frame_count": 8,
-  "layout": "horizontal"
+  "layout": "horizontal",
+  "image_size": "1024x1024",
+  "guidance_scale": 7.5,
+  "num_inference_steps": 28
 }
 ```
 
 Supported layout prompts include `horizontal`, `vertical`, and `3x3`. Other
 layout text is passed through to the image model instead of being blocked by
-the MCP server.
+the MCP server. Optional tuning fields are forwarded to compatible image
+providers when supplied.
