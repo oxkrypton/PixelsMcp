@@ -73,3 +73,19 @@ curl http://127.0.0.1:8080/healthz
 ## Tool
 
 - `generate_image`: generates an image from `prompt`, saves it locally, and returns the file information.
+- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, and `layout`, saves it locally, and returns the file information.
+
+Example sprite sheet arguments:
+
+```json
+{
+  "prompt": "pixel art knight with a blue cape",
+  "action": "walk",
+  "frame_count": 8,
+  "layout": "horizontal"
+}
+```
+
+Supported layout prompts include `horizontal`, `vertical`, and `3x3`. Other
+layout text is passed through to the image model instead of being blocked by
+the MCP server.
