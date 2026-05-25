@@ -87,7 +87,7 @@ deployed MCP URL do not need to set them.
 | `PIXELSMCP_REFERENCE_MODEL` | `Qwen/Qwen-Image-Edit-2509` | Image model used when a request includes `reference_image`. |
 | `PIXELSMCP_EXTRA_HEADERS` | empty | Optional JSON object or key/value list of extra provider headers. |
 | `PIXELSMCP_TIMEOUT` | `2m0s` | HTTP timeout for provider requests. |
-| `PIXELSMCP_IMAGE_SAVE_DIR` | `./generated-images` | Server-side directory where generated images are saved. |
+| `PIXELSMCP_IMAGE_SAVE_DIR` | `./generated-images` | Server-side directory where generated images are saved when `output_path` is omitted. |
 
 `PIXELSMCP_IMAGE_MODEL` is still accepted as a legacy alias for
 `PIXELSMCP_MODEL`.
@@ -123,11 +123,17 @@ curl http://127.0.0.1:8080/healthz
 
 ## Tools
 
-- `generate_image`: generates an image from `prompt`, optional `reference_image`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
-- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, optional `reference_image`, optional `frame_width`, `frame_height`, `spacing`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
+- `generate_image`: generates an image from `prompt`, optional `reference_image`, optional `background_color`, optional tuning args, optional `seed`, optional `negative_prompt`, and optional `output_path`, saves it on the server, and returns the file information.
+- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, optional `reference_image`, optional `frame_width`, `frame_height`, `spacing`, optional `background_color`, optional tuning args, optional `seed`, optional `negative_prompt`, and optional `output_path`, saves it on the server, and returns the file information.
 
 Use `background_color` for a solid key color like `#00FF00` or `#FF00FF`.
 Sprite sheets default to 64x64 frames with 2px spacing and a light-gray background if you omit those geometry fields and `background_color`.
+Use `output_path` when the caller wants the image written to a specific local
+workspace path. It must be an absolute path. If it points to an existing
+directory, PixelsMcp writes an automatically named image into that directory.
+If it points to a file, PixelsMcp writes that file and adds the image extension
+when the file path has none. The response `saved_path` is the actual absolute
+path written by the server; `local_path` is kept as a compatibility alias.
 Use `reference_image` only when you want the server to route the request through
 `PIXELSMCP_REFERENCE_MODEL`; it may be an http(s) URL, a `data:image/...`
 base64 URL, or raw base64 image data without the `data:` prefix. If your
@@ -149,7 +155,8 @@ Example image arguments:
   "guidance_scale": 7.5,
   "num_inference_steps": 28,
   "seed": 12345,
-  "negative_prompt": "blurry, low quality"
+  "negative_prompt": "blurry, low quality",
+  "output_path": "/Users/krypton/Documents/go-tiny-claw/generated-images/cyberpunk-engineer.png"
 }
 ```
 
@@ -170,7 +177,8 @@ Example sprite sheet arguments:
   "guidance_scale": 7.5,
   "num_inference_steps": 28,
   "seed": 12345,
-  "negative_prompt": "extra limbs, realistic 3D, gradient background"
+  "negative_prompt": "extra limbs, realistic 3D, gradient background",
+  "output_path": "/Users/krypton/Documents/go-tiny-claw/generated-images"
 }
 ```
 
