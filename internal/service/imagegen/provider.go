@@ -36,6 +36,7 @@ type GenerationOptions struct {
 	NegativePrompt    string
 	BackgroundColor   string
 	ReferenceImage    string
+	OutputPath        string
 }
 
 type Provider interface {

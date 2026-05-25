@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -68,6 +69,15 @@ func TestGenerateDownloadsAndSavesImage(t *testing.T) {
 	if result.LocalPath == "" {
 		t.Fatal("local path is empty")
 	}
+	if result.SavedPath == "" {
+		t.Fatal("saved path is empty")
+	}
+	if result.LocalPath != result.SavedPath {
+		t.Fatalf("localPath = %q, want savedPath %q", result.LocalPath, result.SavedPath)
+	}
+	if !filepath.IsAbs(result.SavedPath) {
+		t.Fatalf("savedPath = %q, want absolute path", result.SavedPath)
+	}
 
 	data, err := os.ReadFile(result.LocalPath)
 	if err != nil {
@@ -75,6 +85,139 @@ func TestGenerateDownloadsAndSavesImage(t *testing.T) {
 	}
 	if string(data) != "PNGDATA" {
 		t.Fatalf("saved file content = %q, want PNGDATA", string(data))
+	}
+}
+
+func TestGenerateWithOptionsSavesToAbsoluteOutputDirectory(t *testing.T) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/image.png"}],"seed":321}`, nil), nil
+		case "/image.png":
+			return newTestResponse(http.StatusOK, "PNGDATA", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
+		default:
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
+		}
+	})
+
+	saveDir := t.TempDir()
+	outputDir := t.TempDir()
+	svc, err := NewService(Config{
+		APIKey:  "test-key",
+		BaseURL: "http://example.invalid",
+		SaveDir: saveDir,
+		Client:  client,
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	result, err := svc.GenerateWithOptions(context.Background(), "a robot in a garden", GenerationOptions{
+		OutputPath: outputDir,
+	})
+	if err != nil {
+		t.Fatalf("GenerateWithOptions returned error: %v", err)
+	}
+
+	if filepath.Dir(result.SavedPath) != outputDir {
+		t.Fatalf("savedPath = %q, want file under %q", result.SavedPath, outputDir)
+	}
+	if result.LocalPath != result.SavedPath {
+		t.Fatalf("localPath = %q, want savedPath %q", result.LocalPath, result.SavedPath)
+	}
+	data, err := os.ReadFile(result.SavedPath)
+	if err != nil {
+		t.Fatalf("read saved file: %v", err)
+	}
+	if got := string(data); got != "PNGDATA" {
+		t.Fatalf("saved file content = %q, want PNGDATA", got)
+	}
+	if entries, err := os.ReadDir(saveDir); err != nil {
+		t.Fatalf("read saveDir: %v", err)
+	} else if len(entries) != 0 {
+		t.Fatalf("saveDir entries = %d, want 0", len(entries))
+	}
+}
+
+func TestGenerateWithOptionsSavesToAbsoluteOutputFileAndAddsExtension(t *testing.T) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/image"}],"seed":654}`, nil), nil
+		case "/image":
+			return newTestResponse(http.StatusOK, "JPEGDATA", map[string]string{
+				"Content-Type": "image/jpeg",
+			}), nil
+		default:
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
+		}
+	})
+
+	outputPath := filepath.Join(t.TempDir(), "custom-image")
+	svc, err := NewService(Config{
+		APIKey:  "test-key",
+		BaseURL: "http://example.invalid",
+		SaveDir: t.TempDir(),
+		Client:  client,
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	result, err := svc.GenerateWithOptions(context.Background(), "a robot in a garden", GenerationOptions{
+		OutputPath: outputPath,
+	})
+	if err != nil {
+		t.Fatalf("GenerateWithOptions returned error: %v", err)
+	}
+
+	wantPath := outputPath + ".jpg"
+	if result.SavedPath != wantPath {
+		t.Fatalf("savedPath = %q, want %q", result.SavedPath, wantPath)
+	}
+	data, err := os.ReadFile(result.SavedPath)
+	if err != nil {
+		t.Fatalf("read saved file: %v", err)
+	}
+	if got := string(data); got != "JPEGDATA" {
+		t.Fatalf("saved file content = %q, want JPEGDATA", got)
+	}
+}
+
+func TestGenerateWithOptionsRejectsRelativeOutputPath(t *testing.T) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/image.png"}],"seed":123}`, nil), nil
+		case "/image.png":
+			return newTestResponse(http.StatusOK, "PNGDATA", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
+		default:
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
+		}
+	})
+
+	svc, err := NewService(Config{
+		APIKey:  "test-key",
+		BaseURL: "http://example.invalid",
+		SaveDir: t.TempDir(),
+		Client:  client,
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	_, err = svc.GenerateWithOptions(context.Background(), "a robot in a garden", GenerationOptions{
+		OutputPath: "generated-images/slime.png",
+	})
+	if err == nil {
+		t.Fatal("GenerateWithOptions returned nil error")
+	}
+	if !strings.Contains(err.Error(), "output_path must be an absolute path") {
+		t.Fatalf("error = %q, want output_path error", err.Error())
 	}
 }
 

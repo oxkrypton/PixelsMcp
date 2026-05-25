@@ -2,6 +2,7 @@ package imagegen
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -34,6 +35,7 @@ type Result struct {
 	Prompt             string    `json:"prompt"`
 	Model              string    `json:"model"`
 	ImageURL           string    `json:"image_url"`
+	SavedPath          string    `json:"saved_path"`
 	LocalPath          string    `json:"local_path"`
 	Seed               int64     `json:"seed,omitempty"`
 	InferenceMS        float64   `json:"inference_ms,omitempty"`
@@ -41,6 +43,7 @@ type Result struct {
 	UsedReferenceImage bool      `json:"used_reference_image,omitempty"`
 	ContentType        string    `json:"content_type,omitempty"`
 	Bytes              int64     `json:"bytes,omitempty"`
+	ImageDataBase64    string    `json:"image_data_base64,omitempty"`
 	GeneratedAt        time.Time `json:"generated_at"`
 	DownloadedAt       time.Time `json:"downloaded_at"`
 }
@@ -188,40 +191,38 @@ func (s *Service) generate(ctx context.Context, prompt string, fileNamePrefix st
 		GeneratedAt:        time.Now().UTC(),
 	}
 
-	localPath, contentType, bytesWritten, err := s.downloadImage(ctx, result.ImageURL, result, fileNamePrefix)
+	savedPath, contentType, bytesWritten, data, err := s.downloadImage(ctx, result.ImageURL, result, fileNamePrefix, generation.OutputPath)
 	if err != nil {
 		return nil, err
 	}
-	result.LocalPath = localPath
+	result.SavedPath = savedPath
+	result.LocalPath = savedPath
 	result.ContentType = contentType
 	result.Bytes = bytesWritten
+	result.ImageDataBase64 = base64.StdEncoding.EncodeToString(data)
 	result.DownloadedAt = time.Now().UTC()
 
 	return result, nil
 }
 
-func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Result, fileNamePrefix string) (string, string, int64, error) {
+func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Result, fileNamePrefix string, outputPath string) (string, string, int64, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("create image download request: %w", err)
+		return "", "", 0, nil, fmt.Errorf("create image download request: %w", err)
 	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("download generated image: %w", err)
+		return "", "", 0, nil, fmt.Errorf("download generated image: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		if len(body) > 0 {
-			return "", "", 0, fmt.Errorf("download generated image failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+			return "", "", 0, nil, fmt.Errorf("download generated image failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 		}
-		return "", "", 0, fmt.Errorf("download generated image failed: status %d", resp.StatusCode)
-	}
-
-	if err := os.MkdirAll(s.saveDir, 0o755); err != nil {
-		return "", "", 0, fmt.Errorf("create image output directory: %w", err)
+		return "", "", 0, nil, fmt.Errorf("download generated image failed: status %d", resp.StatusCode)
 	}
 
 	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
@@ -234,18 +235,50 @@ func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Re
 	}
 
 	fileName := buildFileName(fileNamePrefix, result.Model, result.Seed, ext)
-	filePath := filepath.Join(s.saveDir, fileName)
-
-	file, err := os.Create(filePath)
+	filePath, err := s.resolveOutputPath(strings.TrimSpace(outputPath), fileName, ext)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("create image file: %w", err)
-	}
-	defer file.Close()
-
-	written, err := io.Copy(file, resp.Body)
-	if err != nil {
-		return "", "", 0, fmt.Errorf("save generated image: %w", err)
+		return "", "", 0, nil, err
 	}
 
-	return filePath, contentType, written, nil
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", 0, nil, fmt.Errorf("read image data: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		return "", "", 0, nil, fmt.Errorf("create image output directory: %w", err)
+	}
+
+	if err := os.WriteFile(filePath, data, 0o644); err != nil {
+		return "", "", 0, nil, fmt.Errorf("save generated image: %w", err)
+	}
+
+	return filePath, contentType, int64(len(data)), data, nil
+}
+
+func (s *Service) resolveOutputPath(outputPath string, fileName string, ext string) (string, error) {
+	if outputPath == "" {
+		filePath := filepath.Join(s.saveDir, fileName)
+		absPath, err := filepath.Abs(filePath)
+		if err != nil {
+			return "", fmt.Errorf("resolve image output path: %w", err)
+		}
+		return absPath, nil
+	}
+
+	if !filepath.IsAbs(outputPath) {
+		return "", errors.New("output_path must be an absolute path")
+	}
+
+	if info, err := os.Stat(outputPath); err == nil && info.IsDir() {
+		return filepath.Join(outputPath, fileName), nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("check image output path: %w", err)
+	}
+
+	if filepath.Ext(outputPath) == "" {
+		outputPath += ext
+	}
+
+	return outputPath, nil
 }
