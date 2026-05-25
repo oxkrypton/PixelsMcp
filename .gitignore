@@ -4,3 +4,6 @@
 .env.local
 /generated-images
 .mcp.json
+frontend/node_modules
+frontend/dist
+frontend

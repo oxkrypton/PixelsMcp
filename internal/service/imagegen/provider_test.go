@@ -256,8 +256,53 @@ func TestOpenAICompatibleProviderRejectsUnsupportedReferenceImage(t *testing.T) 
 	_, err = provider.Generate(context.Background(), "make it cinematic", GenerationOptions{
 		ReferenceImage: "/tmp/reference.png",
 	})
-	if err == nil || !strings.Contains(err.Error(), "http(s) URL or data:image") {
+	if err == nil || !strings.Contains(err.Error(), "http(s) URL, a data:image base64 URL, or raw base64 image data") {
 		t.Fatalf("Generate error = %v, want unsupported reference image error", err)
+	}
+}
+
+func TestOpenAICompatibleProviderSupportsRawBase64ReferenceImage(t *testing.T) {
+	var captured map[string]any
+
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case openAIGenerationPath:
+			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"https://example.invalid/image.png"}],"seed":321}`, nil), nil
+		default:
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
+		}
+	})
+
+	provider, err := NewProvider(ProviderConfig{
+		Provider:       ProviderOpenAICompatible,
+		APIKey:         "test-key",
+		BaseURL:        "http://example.invalid",
+		Model:          "Text/Model",
+		ReferenceModel: "Reference/Model",
+		Client:         client,
+	})
+	if err != nil {
+		t.Fatalf("NewProvider returned error: %v", err)
+	}
+
+	result, err := provider.Generate(context.Background(), "make it cinematic", GenerationOptions{
+		ReferenceImage: "iVBORw0KGgo=",
+	})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	if got, ok := captured["model"].(string); !ok || got != "Reference/Model" {
+		t.Fatalf("model = %#v, want Reference/Model", captured["model"])
+	}
+	if got, ok := captured["image"].(string); !ok || got != "data:image/png;base64,iVBORw0KGgo=" {
+		t.Fatalf("image = %#v, want wrapped data url", captured["image"])
+	}
+	if !result.UsedReferenceImage {
+		t.Fatal("UsedReferenceImage = false, want true")
 	}
 }
 

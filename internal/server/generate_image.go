@@ -24,7 +24,7 @@ func (h *generateImageToolHandler) handle(ctx context.Context, _ mcp.CallToolReq
 func newGenerateImageTool() mcp.Tool {
 	return mcp.NewTool(
 		"generate_image",
-		mcp.WithDescription("Generate an image from a prompt, optional reference image, optional solid background color, optional tuning args, seed, and negative prompt, save it locally, and return the file information"),
+		mcp.WithDescription("Generate an image from a prompt, optional reference image, optional solid background color, optional tuning args, seed, and negative prompt. Reference images may be http(s) URLs, data:image base64 URLs, or raw base64 image data. Save the result locally and return the file information"),
 		mcp.WithInputSchema[GenerateImageArgs](),
 	)
 }

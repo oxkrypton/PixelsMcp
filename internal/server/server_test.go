@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -63,6 +64,11 @@ func TestToolSchemasExposeCommonGenerationFields(t *testing.T) {
 		"negative_prompt",
 		"reference_image",
 	})
+
+	for _, schema := range []map[string]any{imageSchema, spriteSchema} {
+		assertSchemaPropertyDescriptionContains(t, schema, "reference_image", "pass only the raw base64 payload")
+		assertSchemaPropertyDescriptionContains(t, schema, "reference_image", "the server will restore the data URL")
+	}
 }
 
 func rawToolSchema(t *testing.T, tool mcp.Tool) map[string]any {
@@ -86,6 +92,26 @@ func assertSchemaProperties(t *testing.T, schema map[string]any, names []string)
 		if _, ok := properties[name]; !ok {
 			t.Fatalf("schema missing property %q: %#v", name, properties)
 		}
+	}
+}
+
+func assertSchemaPropertyDescriptionContains(t *testing.T, schema map[string]any, name string, want string) {
+	t.Helper()
+
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema properties = %#v, want object", schema["properties"])
+	}
+	property, ok := properties[name].(map[string]any)
+	if !ok {
+		t.Fatalf("schema property %q = %#v, want object", name, properties[name])
+	}
+	description, ok := property["description"].(string)
+	if !ok {
+		t.Fatalf("schema property %q description = %#v, want string", name, property["description"])
+	}
+	if !strings.Contains(description, want) {
+		t.Fatalf("schema property %q description = %q, want it to contain %q", name, description, want)
 	}
 }
 

@@ -129,11 +129,14 @@ curl http://127.0.0.1:8080/healthz
 Use `background_color` for a solid key color like `#00FF00` or `#FF00FF`.
 Sprite sheets default to 64x64 frames with 2px spacing and a light-gray background if you omit those geometry fields and `background_color`.
 Use `reference_image` only when you want the server to route the request through
-`PIXELSMCP_REFERENCE_MODEL`; it must be an http(s) URL or a `data:image/...`
-base64 URL. Do not set the default `PIXELSMCP_MODEL` to a reference-only edit
-model if you still want plain text-to-image requests to work. For SiliconFlow's
-Qwen edit models, `image_size` and `guidance_scale` are omitted automatically
-because those fields are not supported by those models.
+`PIXELSMCP_REFERENCE_MODEL`; it may be an http(s) URL, a `data:image/...`
+base64 URL, or raw base64 image data without the `data:` prefix. If your
+client auto-renders `data:image/...` strings as images, send the raw base64
+payload instead; the server will wrap it back into a data URL before calling
+the provider. Do not set the default `PIXELSMCP_MODEL` to a reference-only
+edit model if you still want plain text-to-image requests to work. For
+SiliconFlow's Qwen edit models, `image_size` and `guidance_scale` are omitted
+automatically because those fields are not supported by those models.
 
 Example image arguments:
 
