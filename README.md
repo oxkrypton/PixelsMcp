@@ -87,7 +87,7 @@ deployed MCP URL do not need to set them.
 | `PIXELSMCP_REFERENCE_MODEL` | `Qwen/Qwen-Image-Edit-2509` | Image model used when a request includes `reference_image`. |
 | `PIXELSMCP_EXTRA_HEADERS` | empty | Optional JSON object or key/value list of extra provider headers. |
 | `PIXELSMCP_TIMEOUT` | `2m0s` | HTTP timeout for provider requests. |
-| `PIXELSMCP_IMAGE_SAVE_DIR` | `./generated-images` | Fallback server-side directory where generated images are saved when client roots are not available. |
+| `PIXELSMCP_IMAGE_SAVE_DIR` | `./generated-images` | Server-side directory where generated images are saved. |
 
 `PIXELSMCP_IMAGE_MODEL` is still accepted as a legacy alias for
 `PIXELSMCP_MODEL`.
@@ -123,8 +123,8 @@ curl http://127.0.0.1:8080/healthz
 
 ## Tools
 
-- `generate_image`: generates an image from `prompt`, optional `reference_image`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it under the current client root's `generated-images/` directory when roots are available, and returns the file information.
-- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, optional `reference_image`, optional `frame_width`, `frame_height`, `spacing`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it under the current client root's `generated-images/` directory when roots are available, and returns the file information.
+- `generate_image`: generates an image from `prompt`, optional `reference_image`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
+- `generate_sprite_sheet`: generates a sprite sheet from `prompt`, `action`, `frame_count`, `layout`, optional `reference_image`, optional `frame_width`, `frame_height`, `spacing`, optional `background_color`, optional tuning args, optional `seed`, and optional `negative_prompt`, saves it on the server, and returns the file information.
 
 Use `background_color` for a solid key color like `#00FF00` or `#FF00FF`.
 Sprite sheets default to 64x64 frames with 2px spacing and a light-gray background if you omit those geometry fields and `background_color`.

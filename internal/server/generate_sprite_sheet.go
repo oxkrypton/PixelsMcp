@@ -11,11 +11,10 @@ import (
 
 type generateSpriteSheetToolHandler struct {
 	service *imagegen.Service
-	roots   rootsRequester
 }
 
 func (h *generateSpriteSheetToolHandler) handle(ctx context.Context, _ mcp.CallToolRequest, args GenerateSpriteSheetArgs) (*mcp.CallToolResult, error) {
-	result, err := h.service.GenerateSpriteSheetWithSaveDir(ctx, imagegen.SpriteSheetOptions{
+	result, err := h.service.GenerateSpriteSheet(ctx, imagegen.SpriteSheetOptions{
 		Prompt:      args.Prompt,
 		Action:      args.Action,
 		FrameCount:  args.FrameCount,
@@ -24,7 +23,7 @@ func (h *generateSpriteSheetToolHandler) handle(ctx context.Context, _ mcp.CallT
 		FrameHeight: args.FrameHeight,
 		Spacing:     args.Spacing,
 		Generation:  args.GenerationArgs.generationOptions(),
-	}, saveDirFromRoots(ctx, h.roots))
+	})
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("sprite sheet generation failed: %v", err)), nil
 	}

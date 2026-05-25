@@ -40,19 +40,6 @@ func newTestResponse(status int, body string, headers map[string]string) *http.R
 	}
 }
 
-func fileURI(p string) string {
-	return "file://" + filepath.ToSlash(p)
-}
-
-type testRootsRequester struct {
-	result *mcp.ListRootsResult
-	err    error
-}
-
-func (r testRootsRequester) RequestRoots(context.Context, mcp.ListRootsRequest) (*mcp.ListRootsResult, error) {
-	return r.result, r.err
-}
-
 func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 	var capturedBody map[string]any
 
@@ -245,72 +232,5 @@ func TestGenerateImageToolSupportsReferenceImage(t *testing.T) {
 	}
 	if !parsed.UsedReferenceImage {
 		t.Fatal("usedReferenceImage = false, want true")
-	}
-}
-
-func TestGenerateImageToolUsesClientRootsSaveDir(t *testing.T) {
-	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
-		switch r.URL.Path {
-		case "/v1/images/generations":
-			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/images/1.png"}],"seed":99}`, nil), nil
-		case "/images/1.png":
-			return newTestResponse(http.StatusOK, "fake-png", map[string]string{
-				"Content-Type": "image/png",
-			}), nil
-		default:
-			return newTestResponse(http.StatusNotFound, "not found", nil), nil
-		}
-	})
-
-	rootDir := t.TempDir()
-	service, err := imagegen.NewService(imagegen.Config{
-		APIKey:  "test-key",
-		BaseURL: "http://example.invalid",
-		Model:   "Custom/Model",
-		SaveDir: t.TempDir(),
-		Client:  client,
-	})
-	if err != nil {
-		t.Fatalf("NewService returned error: %v", err)
-	}
-
-	handler := &generateImageToolHandler{
-		service: service,
-		roots: testRootsRequester{
-			result: &mcp.ListRootsResult{
-				Roots: []mcp.Root{
-					{URI: fileURI(rootDir)},
-				},
-			},
-		},
-	}
-	wrapped := mcp.NewTypedToolHandler(handler.handle)
-
-	result, err := wrapped(context.Background(), mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "generate_image",
-			Arguments: map[string]any{
-				"prompt": "a white cat sitting on a window",
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("handler returned error: %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("handler returned error result: %+v", result)
-	}
-
-	parsed, ok := result.StructuredContent.(*imagegen.Result)
-	if !ok {
-		t.Fatalf("structured content type = %T, want *imagegen.Result", result.StructuredContent)
-	}
-
-	wantDir := filepath.Join(rootDir, "generated-images")
-	if filepath.Dir(parsed.LocalPath) != wantDir {
-		t.Fatalf("local path = %q, want file under %q", parsed.LocalPath, wantDir)
-	}
-	if _, err := os.Stat(parsed.LocalPath); err != nil {
-		t.Fatalf("saved image not found: %v", err)
 	}
 }
