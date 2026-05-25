@@ -8,13 +8,15 @@ import (
 )
 
 func New(name, version string, imageService *imagegen.Service) *mcpgo.MCPServer {
-	srv := mcpgo.NewMCPServer(name, version, mcpgo.WithToolCapabilities(false))
+	srv := mcpgo.NewMCPServer(name, version, mcpgo.WithToolCapabilities(false), mcpgo.WithRoots())
 
 	imageHandler := &generateImageToolHandler{
 		service: imageService,
+		roots:   srv,
 	}
 	spriteSheetHandler := &generateSpriteSheetToolHandler{
 		service: imageService,
+		roots:   srv,
 	}
 
 	srv.AddTool(newGenerateImageTool(), mcp.NewTypedToolHandler(imageHandler.handle))

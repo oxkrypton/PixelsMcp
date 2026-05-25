@@ -10,10 +10,11 @@ import (
 
 type generateImageToolHandler struct {
 	service *imagegen.Service
+	roots   rootsRequester
 }
 
 func (h *generateImageToolHandler) handle(ctx context.Context, _ mcp.CallToolRequest, args GenerateImageArgs) (*mcp.CallToolResult, error) {
-	result, err := h.service.GenerateWithOptions(ctx, args.Prompt, args.GenerationArgs.generationOptions())
+	result, err := h.service.GenerateWithOptionsAndSaveDir(ctx, args.Prompt, args.GenerationArgs.generationOptions(), saveDirFromRoots(ctx, h.roots))
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("image generation failed: %v", err)), nil
 	}

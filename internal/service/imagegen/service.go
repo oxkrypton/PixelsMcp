@@ -96,6 +96,10 @@ func (s *Service) Generate(ctx context.Context, prompt string) (*Result, error) 
 }
 
 func (s *Service) GenerateWithOptions(ctx context.Context, prompt string, generation GenerationOptions) (*Result, error) {
+	return s.GenerateWithOptionsAndSaveDir(ctx, prompt, generation, "")
+}
+
+func (s *Service) GenerateWithOptionsAndSaveDir(ctx context.Context, prompt string, generation GenerationOptions, saveDir string) (*Result, error) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
 		return nil, errors.New("prompt is required")
@@ -106,10 +110,14 @@ func (s *Service) GenerateWithOptions(ctx context.Context, prompt string, genera
 		return nil, err
 	}
 
-	return s.generate(ctx, prompt, "", generation)
+	return s.generate(ctx, prompt, "", generation, saveDir)
 }
 
 func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptions) (*SpriteSheetResult, error) {
+	return s.GenerateSpriteSheetWithSaveDir(ctx, opts, "")
+}
+
+func (s *Service) GenerateSpriteSheetWithSaveDir(ctx context.Context, opts SpriteSheetOptions, saveDir string) (*SpriteSheetResult, error) {
 	sourcePrompt := strings.TrimSpace(opts.Prompt)
 	if sourcePrompt == "" {
 		return nil, errors.New("prompt is required")
@@ -148,7 +156,7 @@ func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptio
 		return nil, err
 	}
 
-	result, err := s.generate(ctx, generationPrompt, "sprite-sheet", opts.Generation)
+	result, err := s.generate(ctx, generationPrompt, "sprite-sheet", opts.Generation, saveDir)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +170,7 @@ func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptio
 	}, nil
 }
 
-func (s *Service) generate(ctx context.Context, prompt string, fileNamePrefix string, generation GenerationOptions) (*Result, error) {
+func (s *Service) generate(ctx context.Context, prompt string, fileNamePrefix string, generation GenerationOptions, saveDir string) (*Result, error) {
 	generated, err := s.provider.Generate(ctx, prompt, generation)
 	if err != nil {
 		return nil, err
@@ -188,7 +196,7 @@ func (s *Service) generate(ctx context.Context, prompt string, fileNamePrefix st
 		GeneratedAt:        time.Now().UTC(),
 	}
 
-	localPath, contentType, bytesWritten, err := s.downloadImage(ctx, result.ImageURL, result, fileNamePrefix)
+	localPath, contentType, bytesWritten, err := s.downloadImage(ctx, result.ImageURL, result, fileNamePrefix, saveDir)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +208,7 @@ func (s *Service) generate(ctx context.Context, prompt string, fileNamePrefix st
 	return result, nil
 }
 
-func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Result, fileNamePrefix string) (string, string, int64, error) {
+func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Result, fileNamePrefix string, saveDirOverride string) (string, string, int64, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("create image download request: %w", err)
@@ -220,7 +228,12 @@ func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Re
 		return "", "", 0, fmt.Errorf("download generated image failed: status %d", resp.StatusCode)
 	}
 
-	if err := os.MkdirAll(s.saveDir, 0o755); err != nil {
+	saveDir := strings.TrimSpace(saveDirOverride)
+	if saveDir == "" {
+		saveDir = s.saveDir
+	}
+
+	if err := os.MkdirAll(saveDir, 0o755); err != nil {
 		return "", "", 0, fmt.Errorf("create image output directory: %w", err)
 	}
 
@@ -234,7 +247,7 @@ func (s *Service) downloadImage(ctx context.Context, imageURL string, result *Re
 	}
 
 	fileName := buildFileName(fileNamePrefix, result.Model, result.Seed, ext)
-	filePath := filepath.Join(s.saveDir, fileName)
+	filePath := filepath.Join(saveDir, fileName)
 
 	file, err := os.Create(filePath)
 	if err != nil {
