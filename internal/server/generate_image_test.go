@@ -65,6 +65,7 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 	})
 
 	saveDir := t.TempDir()
+	outputPath := filepath.Join(t.TempDir(), "tool-output.png")
 	service, err := imagegen.NewService(imagegen.Config{
 		APIKey:  "test-key",
 		BaseURL: "http://example.invalid",
@@ -90,6 +91,7 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 				"num_inference_steps": 24,
 				"seed":                1234,
 				"negative_prompt":     "blurry, gradient background",
+				"output_path":         outputPath,
 			},
 		},
 	})
@@ -137,6 +139,12 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 	if parsed.LocalPath == "" {
 		t.Fatal("localPath is empty")
 	}
+	if parsed.SavedPath != outputPath {
+		t.Fatalf("savedPath = %q, want %q", parsed.SavedPath, outputPath)
+	}
+	if parsed.LocalPath != parsed.SavedPath {
+		t.Fatalf("localPath = %q, want savedPath %q", parsed.LocalPath, parsed.SavedPath)
+	}
 	if _, err := os.Stat(parsed.LocalPath); err != nil {
 		t.Fatalf("saved image not found: %v", err)
 	}
@@ -161,8 +169,8 @@ func TestGenerateImageToolReturnsStructuredResult(t *testing.T) {
 	if got, ok := capturedBody["negative_prompt"].(string); !ok || got != "blurry, gradient background" {
 		t.Fatalf("negative_prompt = %#v, want negative prompt", capturedBody["negative_prompt"])
 	}
-	if filepath.Dir(parsed.LocalPath) != saveDir {
-		t.Fatalf("local path = %q, want file under %q", parsed.LocalPath, saveDir)
+	if filepath.Dir(parsed.LocalPath) == saveDir {
+		t.Fatalf("local path = %q, did not use output_path", parsed.LocalPath)
 	}
 }
 

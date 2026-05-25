@@ -34,7 +34,7 @@ func (h *generateSpriteSheetToolHandler) handle(ctx context.Context, _ mcp.CallT
 func newGenerateSpriteSheetTool() mcp.Tool {
 	return mcp.NewTool(
 		"generate_sprite_sheet",
-		mcp.WithDescription("Generate a sprite sheet image from a prompt, action, frame count, layout, optional reference image, optional frame geometry, optional solid background color, optional tuning args, seed, and negative prompt. Reference images may be http(s) URLs, data:image base64 URLs, or raw base64 image data. Save the result locally and return the file information"),
+		mcp.WithDescription("Generate a sprite sheet image from a prompt, action, frame count, layout, optional reference image, optional frame geometry, optional solid background color, optional tuning args, seed, negative prompt, and output_path. Reference images may be http(s) URLs, data:image base64 URLs, or raw base64 image data. Save the result on the server. To save into a caller workspace, pass an absolute output_path. The response saved_path is the actual absolute file path written by the server; image_data_base64 is also returned as a fallback."),
 		mcp.WithInputSchema[GenerateSpriteSheetArgs](),
 	)
 }

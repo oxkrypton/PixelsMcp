@@ -33,6 +33,7 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 	})
 
 	saveDir := t.TempDir()
+	outputPath := filepath.Join(t.TempDir(), "sprite-output.png")
 	service, err := imagegen.NewService(imagegen.Config{
 		APIKey:  "test-key",
 		BaseURL: "http://example.invalid",
@@ -64,6 +65,7 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 				"num_inference_steps": 30,
 				"seed":                9876,
 				"negative_prompt":     "extra limbs, realistic 3D",
+				"output_path":         outputPath,
 			},
 		},
 	})
@@ -93,8 +95,14 @@ func TestGenerateSpriteSheetToolReturnsStructuredResult(t *testing.T) {
 	if parsed.LocalPath == "" {
 		t.Fatal("localPath is empty")
 	}
-	if filepath.Dir(parsed.LocalPath) != saveDir {
-		t.Fatalf("local path = %q, want file under %q", parsed.LocalPath, saveDir)
+	if parsed.SavedPath != outputPath {
+		t.Fatalf("savedPath = %q, want %q", parsed.SavedPath, outputPath)
+	}
+	if parsed.LocalPath != parsed.SavedPath {
+		t.Fatalf("localPath = %q, want savedPath %q", parsed.LocalPath, parsed.SavedPath)
+	}
+	if filepath.Dir(parsed.LocalPath) == saveDir {
+		t.Fatalf("local path = %q, did not use output_path", parsed.LocalPath)
 	}
 	if got, want := string(mustReadFile(t, parsed.LocalPath)), "fake-sprite"; got != want {
 		t.Fatalf("saved image content = %q, want %q", got, want)
