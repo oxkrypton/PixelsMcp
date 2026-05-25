@@ -242,3 +242,73 @@ func TestGenerateImageToolSupportsReferenceImage(t *testing.T) {
 		t.Fatal("usedReferenceImage = false, want true")
 	}
 }
+
+func TestGenerateImageToolSupportsReferencePath(t *testing.T) {
+	var capturedBody map[string]any
+
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			if err := json.NewDecoder(r.Body).Decode(&capturedBody); err != nil {
+				t.Fatalf("decode generation request: %v", err)
+			}
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/images/1.png"}],"seed":99}`, nil), nil
+		case "/images/1.png":
+			return newTestResponse(http.StatusOK, "fake-png", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
+		default:
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
+		}
+	})
+
+	referencePath := filepath.Join(t.TempDir(), "reference.png")
+	if err := os.WriteFile(referencePath, []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, 0o644); err != nil {
+		t.Fatalf("write reference image: %v", err)
+	}
+
+	service, err := imagegen.NewService(imagegen.Config{
+		APIKey:         "test-key",
+		BaseURL:        "http://example.invalid",
+		Model:          "Text/Model",
+		ReferenceModel: "Reference/Model",
+		SaveDir:        t.TempDir(),
+		Client:         client,
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	handler := &generateImageToolHandler{service: service}
+	wrapped := mcp.NewTypedToolHandler(handler.handle)
+
+	result, err := wrapped(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "generate_image",
+			Arguments: map[string]any{
+				"prompt":         "turn the reference into a game item",
+				"reference_path": referencePath,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handler returned error result: %+v", result)
+	}
+
+	parsed, ok := result.StructuredContent.(*imagegen.Result)
+	if !ok {
+		t.Fatalf("structured content type = %T, want *imagegen.Result", result.StructuredContent)
+	}
+	if capturedBody["model"] != "Reference/Model" {
+		t.Fatalf("generation model = %#v, want Reference/Model", capturedBody["model"])
+	}
+	if capturedBody["image"] != "data:image/png;base64,iVBORw0KGgo=" {
+		t.Fatalf("reference image = %#v, want reference data URL", capturedBody["image"])
+	}
+	if !parsed.UsedReferenceImage {
+		t.Fatal("usedReferenceImage = false, want true")
+	}
+}

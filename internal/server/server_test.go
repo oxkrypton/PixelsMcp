@@ -45,6 +45,7 @@ func TestToolSchemasExposeCommonGenerationFields(t *testing.T) {
 		"seed",
 		"negative_prompt",
 		"reference_image",
+		"reference_path",
 	})
 
 	spriteSchema := rawToolSchema(t, newGenerateSpriteSheetTool())
@@ -63,11 +64,20 @@ func TestToolSchemasExposeCommonGenerationFields(t *testing.T) {
 		"seed",
 		"negative_prompt",
 		"reference_image",
+		"reference_path",
 	})
 
 	for _, schema := range []map[string]any{imageSchema, spriteSchema} {
-		assertSchemaPropertyDescriptionContains(t, schema, "reference_image", "pass only the raw base64 payload")
-		assertSchemaPropertyDescriptionContains(t, schema, "reference_image", "the server will restore the data URL")
+		assertSchemaPropertyDescriptionContains(t, schema, "reference_image", "http(s) URL")
+		assertSchemaPropertyDescriptionContains(t, schema, "reference_path", "absolute local path")
+		assertSchemaPropertyDescriptionExcludes(t, schema, "reference_image", "base64")
+		assertSchemaPropertyDescriptionExcludes(t, schema, "reference_path", "base64")
+	}
+
+	for _, tool := range []mcp.Tool{newGenerateImageTool(), newGenerateSpriteSheetTool()} {
+		if strings.Contains(strings.ToLower(tool.Description), "base64") {
+			t.Fatalf("tool %q description mentions base64: %q", tool.Name, tool.Description)
+		}
 	}
 }
 
@@ -112,6 +122,26 @@ func assertSchemaPropertyDescriptionContains(t *testing.T, schema map[string]any
 	}
 	if !strings.Contains(description, want) {
 		t.Fatalf("schema property %q description = %q, want it to contain %q", name, description, want)
+	}
+}
+
+func assertSchemaPropertyDescriptionExcludes(t *testing.T, schema map[string]any, name string, unwanted string) {
+	t.Helper()
+
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema properties = %#v, want object", schema["properties"])
+	}
+	property, ok := properties[name].(map[string]any)
+	if !ok {
+		t.Fatalf("schema property %q = %#v, want object", name, properties[name])
+	}
+	description, ok := property["description"].(string)
+	if !ok {
+		t.Fatalf("schema property %q description = %#v, want string", name, property["description"])
+	}
+	if strings.Contains(strings.ToLower(description), strings.ToLower(unwanted)) {
+		t.Fatalf("schema property %q description = %q, want it to exclude %q", name, description, unwanted)
 	}
 }
 

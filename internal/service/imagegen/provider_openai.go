@@ -3,7 +3,6 @@ package imagegen
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -230,75 +229,6 @@ func containsModel(models []string, target string) bool {
 		}
 	}
 	return false
-}
-
-func isSupportedReferenceImage(value string) bool {
-	value = strings.ToLower(strings.TrimSpace(value))
-	return strings.HasPrefix(value, "http://") ||
-		strings.HasPrefix(value, "https://") ||
-		strings.HasPrefix(value, "data:image/")
-}
-
-func normalizeReferenceImage(value string) (string, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "", nil
-	}
-
-	if isSupportedReferenceImage(value) {
-		return value, nil
-	}
-
-	compact := strings.Join(strings.Fields(value), "")
-	if compact == "" {
-		return "", errors.New("reference_image must be an http(s) URL, a data:image base64 URL, or raw base64 image data")
-	}
-
-	decoded, err := decodeBase64ImagePayload(compact)
-	if err != nil {
-		return "", errors.New("reference_image must be an http(s) URL, a data:image base64 URL, or raw base64 image data")
-	}
-
-	mimeType := inferImageMimeType(decoded)
-	if mimeType == "" {
-		return "", errors.New("raw reference_image base64 must decode to a PNG, JPEG, GIF, WebP, BMP, or TIFF image")
-	}
-
-	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(decoded), nil
-}
-
-func decodeBase64ImagePayload(value string) ([]byte, error) {
-	decoders := []func(string) ([]byte, error){
-		base64.StdEncoding.DecodeString,
-		base64.RawStdEncoding.DecodeString,
-		base64.URLEncoding.DecodeString,
-		base64.RawURLEncoding.DecodeString,
-	}
-	for _, decode := range decoders {
-		if decoded, err := decode(value); err == nil {
-			return decoded, nil
-		}
-	}
-	return nil, errors.New("invalid base64 payload")
-}
-
-func inferImageMimeType(data []byte) string {
-	switch {
-	case len(data) >= 8 && bytes.Equal(data[:8], []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}):
-		return "image/png"
-	case len(data) >= 3 && bytes.Equal(data[:3], []byte{0xFF, 0xD8, 0xFF}):
-		return "image/jpeg"
-	case len(data) >= 6 && (bytes.Equal(data[:6], []byte("GIF87a")) || bytes.Equal(data[:6], []byte("GIF89a"))):
-		return "image/gif"
-	case len(data) >= 12 && bytes.Equal(data[:4], []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP")):
-		return "image/webp"
-	case len(data) >= 2 && bytes.Equal(data[:2], []byte("BM")):
-		return "image/bmp"
-	case len(data) >= 4 && (bytes.Equal(data[:4], []byte{0x49, 0x49, 0x2A, 0x00}) || bytes.Equal(data[:4], []byte{0x4D, 0x4D, 0x00, 0x2A})):
-		return "image/tiff"
-	default:
-		return ""
-	}
 }
 
 func (p *openAICompatibleProvider) applyHeaders(req *http.Request) {

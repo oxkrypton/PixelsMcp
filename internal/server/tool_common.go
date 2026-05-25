@@ -9,7 +9,8 @@ type GenerationArgs struct {
 	NumInferenceSteps int     `json:"num_inference_steps,omitempty" jsonschema:"Optional number of inference steps to request"`
 	Seed              *int64  `json:"seed,omitempty" jsonschema:"Optional generation seed for reproducible outputs"`
 	NegativePrompt    string  `json:"negative_prompt,omitempty" jsonschema:"Optional text describing what to avoid in the generated image"`
-	ReferenceImage    string  `json:"reference_image,omitempty" jsonschema:"Optional reference image as an http(s) URL, a data:image base64 URL, or raw base64 image data without the data: prefix. If your client renders data:image strings as images, pass only the raw base64 payload; the server will restore the data URL before calling the image provider."`
+	ReferenceImage    string  `json:"reference_image,omitempty" jsonschema:"Optional reference image as an http(s) URL. Mutually exclusive with reference_path."`
+	ReferencePath     string  `json:"reference_path,omitempty" jsonschema:"Optional absolute local path to a reference image file readable by the server. Mutually exclusive with reference_image."`
 	OutputPath        string  `json:"output_path,omitempty" jsonschema:"Optional absolute file or directory path where the generated image should be saved by the server. Use this to save into a caller workspace."`
 }
 
@@ -22,6 +23,7 @@ func (a GenerationArgs) generationOptions() imagegen.GenerationOptions {
 		Seed:              a.Seed,
 		NegativePrompt:    a.NegativePrompt,
 		ReferenceImage:    a.ReferenceImage,
+		ReferencePath:     a.ReferencePath,
 		OutputPath:        a.OutputPath,
 	}
 }

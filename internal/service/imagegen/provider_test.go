@@ -253,15 +253,21 @@ func TestOpenAICompatibleProviderRejectsUnsupportedReferenceImage(t *testing.T) 
 		t.Fatalf("NewProvider returned error: %v", err)
 	}
 
-	_, err = provider.Generate(context.Background(), "make it cinematic", GenerationOptions{
-		ReferenceImage: "/tmp/reference.png",
-	})
-	if err == nil || !strings.Contains(err.Error(), "http(s) URL, a data:image base64 URL, or raw base64 image data") {
-		t.Fatalf("Generate error = %v, want unsupported reference image error", err)
+	for _, referenceImage := range []string{
+		"/tmp/reference.png",
+		"iVBORw0KGgo=",
+		"data:text/plain;base64,SGVsbG8=",
+	} {
+		_, err = provider.Generate(context.Background(), "make it cinematic", GenerationOptions{
+			ReferenceImage: referenceImage,
+		})
+		if err == nil || !strings.Contains(err.Error(), "http(s) URL or a provider-prepared data:image URL") {
+			t.Fatalf("Generate(%q) error = %v, want unsupported reference image error", referenceImage, err)
+		}
 	}
 }
 
-func TestOpenAICompatibleProviderSupportsRawBase64ReferenceImage(t *testing.T) {
+func TestOpenAICompatibleProviderSupportsPreparedDataURLReferenceImage(t *testing.T) {
 	var captured map[string]any
 
 	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
@@ -289,7 +295,7 @@ func TestOpenAICompatibleProviderSupportsRawBase64ReferenceImage(t *testing.T) {
 	}
 
 	result, err := provider.Generate(context.Background(), "make it cinematic", GenerationOptions{
-		ReferenceImage: "iVBORw0KGgo=",
+		ReferenceImage: "data:image/png;base64,iVBORw0KGgo=",
 	})
 	if err != nil {
 		t.Fatalf("Generate returned error: %v", err)
@@ -299,7 +305,7 @@ func TestOpenAICompatibleProviderSupportsRawBase64ReferenceImage(t *testing.T) {
 		t.Fatalf("model = %#v, want Reference/Model", captured["model"])
 	}
 	if got, ok := captured["image"].(string); !ok || got != "data:image/png;base64,iVBORw0KGgo=" {
-		t.Fatalf("image = %#v, want wrapped data url", captured["image"])
+		t.Fatalf("image = %#v, want prepared data url", captured["image"])
 	}
 	if !result.UsedReferenceImage {
 		t.Fatal("UsedReferenceImage = false, want true")

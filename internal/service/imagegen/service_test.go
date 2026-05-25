@@ -10,6 +10,19 @@ import (
 	"testing"
 )
 
+func testReferencePNGData() []byte {
+	return []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}
+}
+
+func writeReferencePNG(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "reference.png")
+	if err := os.WriteFile(path, testReferencePNGData(), 0o644); err != nil {
+		t.Fatalf("write reference image: %v", err)
+	}
+	return path
+}
+
 func TestGenerateDownloadsAndSavesImage(t *testing.T) {
 	var gotRequest openAICompatibleGenerationRequest
 
@@ -218,6 +231,153 @@ func TestGenerateWithOptionsRejectsRelativeOutputPath(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "output_path must be an absolute path") {
 		t.Fatalf("error = %q, want output_path error", err.Error())
+	}
+}
+
+func TestGenerateWithOptionsSupportsReferencePath(t *testing.T) {
+	var gotRequest openAICompatibleGenerationRequest
+
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			return newTestResponse(http.StatusOK, `{"images":[{"url":"http://example.invalid/image.png"}],"seed":123}`, nil), nil
+		case "/image.png":
+			return newTestResponse(http.StatusOK, "PNGDATA", map[string]string{
+				"Content-Type": "image/png",
+			}), nil
+		default:
+			return newTestResponse(http.StatusNotFound, "not found", nil), nil
+		}
+	})
+
+	referencePath := writeReferencePNG(t)
+	svc, err := NewService(Config{
+		APIKey:         "test-key",
+		BaseURL:        "http://example.invalid",
+		Model:          "Text/Model",
+		ReferenceModel: "Reference/Model",
+		SaveDir:        t.TempDir(),
+		Client:         client,
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	result, err := svc.GenerateWithOptions(context.Background(), "a robot in a garden", GenerationOptions{
+		ImageSize:      "1024x1024",
+		ReferencePath:  referencePath,
+		GuidanceScale:  7.5,
+		NegativePrompt: "blurry",
+	})
+	if err != nil {
+		t.Fatalf("GenerateWithOptions returned error: %v", err)
+	}
+
+	if gotRequest.Model != "Reference/Model" {
+		t.Fatalf("model = %q, want Reference/Model", gotRequest.Model)
+	}
+	if gotRequest.Image != "data:image/png;base64,iVBORw0KGgo=" {
+		t.Fatalf("image = %q, want reference data URL", gotRequest.Image)
+	}
+	if gotRequest.ImageSize != "" {
+		t.Fatalf("imageSize = %q, want omitted", gotRequest.ImageSize)
+	}
+	if gotRequest.GuidanceScale != 0 {
+		t.Fatalf("guidanceScale = %v, want omitted", gotRequest.GuidanceScale)
+	}
+	if !result.UsedReferenceImage {
+		t.Fatal("UsedReferenceImage = false, want true")
+	}
+}
+
+func TestGenerateWithOptionsRejectsInvalidReferenceInputs(t *testing.T) {
+	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
+		t.Fatal("unexpected provider request")
+		return nil, nil
+	})
+
+	svc, err := NewService(Config{
+		APIKey:         "test-key",
+		BaseURL:        "http://example.invalid",
+		ReferenceModel: "Reference/Model",
+		SaveDir:        t.TempDir(),
+		Client:         client,
+	})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+
+	validReferencePath := writeReferencePNG(t)
+	unsupportedPath := filepath.Join(t.TempDir(), "reference.txt")
+	if err := os.WriteFile(unsupportedPath, []byte("not an image"), 0o644); err != nil {
+		t.Fatalf("write unsupported reference file: %v", err)
+	}
+	oversizedPath := filepath.Join(t.TempDir(), "reference.png")
+	oversizedData := append(testReferencePNGData(), make([]byte, int(maxReferenceImageBytes))...)
+	if err := os.WriteFile(oversizedPath, oversizedData, 0o644); err != nil {
+		t.Fatalf("write oversized reference file: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		opts GenerationOptions
+		want string
+	}{
+		{
+			name: "both reference inputs",
+			opts: GenerationOptions{
+				ReferenceImage: "https://example.invalid/reference.png",
+				ReferencePath:  validReferencePath,
+			},
+			want: "mutually exclusive",
+		},
+		{
+			name: "data url reference image",
+			opts: GenerationOptions{ReferenceImage: "data:image/png;base64,AAA"},
+			want: "reference_image must be an http(s) URL",
+		},
+		{
+			name: "raw base64 reference image",
+			opts: GenerationOptions{ReferenceImage: "iVBORw0KGgo="},
+			want: "reference_image must be an http(s) URL",
+		},
+		{
+			name: "relative reference path",
+			opts: GenerationOptions{ReferencePath: "reference.png"},
+			want: "reference_path must be an absolute path",
+		},
+		{
+			name: "missing reference path",
+			opts: GenerationOptions{ReferencePath: filepath.Join(t.TempDir(), "missing.png")},
+			want: "check reference_path",
+		},
+		{
+			name: "directory reference path",
+			opts: GenerationOptions{ReferencePath: t.TempDir()},
+			want: "regular image file",
+		},
+		{
+			name: "unsupported reference file",
+			opts: GenerationOptions{ReferencePath: unsupportedPath},
+			want: "PNG, JPEG, GIF, WebP, BMP, or TIFF",
+		},
+		{
+			name: "oversized reference file",
+			opts: GenerationOptions{ReferencePath: oversizedPath},
+			want: "10 MB",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := svc.GenerateWithOptions(context.Background(), "a robot in a garden", tt.opts)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("GenerateWithOptions error = %v, want it to contain %q", err, tt.want)
+			}
+		})
 	}
 }
 
@@ -436,7 +596,7 @@ func TestGenerateSpriteSheetBuildsPromptAndSavesImage(t *testing.T) {
 	}
 }
 
-func TestGenerateSpriteSheetWithReferenceImageUsesReferenceModel(t *testing.T) {
+func TestGenerateSpriteSheetWithReferencePathUsesReferenceModel(t *testing.T) {
 	var gotRequest openAICompatibleGenerationRequest
 
 	client := newTestHTTPClient(func(r *http.Request) (*http.Response, error) {
@@ -467,13 +627,14 @@ func TestGenerateSpriteSheetWithReferenceImageUsesReferenceModel(t *testing.T) {
 		t.Fatalf("NewService returned error: %v", err)
 	}
 
+	referencePath := writeReferencePNG(t)
 	result, err := svc.GenerateSpriteSheet(context.Background(), SpriteSheetOptions{
 		Prompt:     "robot mascot",
 		Action:     "idle",
 		FrameCount: 4,
 		Generation: GenerationOptions{
-			ImageSize:      "1024x1024",
-			ReferenceImage: "data:image/png;base64,AAA",
+			ImageSize:     "1024x1024",
+			ReferencePath: referencePath,
 		},
 	})
 	if err != nil {
@@ -483,8 +644,8 @@ func TestGenerateSpriteSheetWithReferenceImageUsesReferenceModel(t *testing.T) {
 	if gotRequest.Model != "Reference/Model" {
 		t.Fatalf("model = %q, want Reference/Model", gotRequest.Model)
 	}
-	if gotRequest.Image != "data:image/png;base64,AAA" {
-		t.Fatalf("image = %q, want data URL", gotRequest.Image)
+	if gotRequest.Image != "data:image/png;base64,iVBORw0KGgo=" {
+		t.Fatalf("image = %q, want reference data URL", gotRequest.Image)
 	}
 	if gotRequest.ImageSize != "" {
 		t.Fatalf("imageSize = %q, want omitted", gotRequest.ImageSize)

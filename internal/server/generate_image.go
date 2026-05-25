@@ -24,7 +24,7 @@ func (h *generateImageToolHandler) handle(ctx context.Context, _ mcp.CallToolReq
 func newGenerateImageTool() mcp.Tool {
 	return mcp.NewTool(
 		"generate_image",
-		mcp.WithDescription("Generate an image from a prompt, optional reference image, optional solid background color, optional tuning args, seed, negative prompt, and output_path. Reference images may be http(s) URLs, data:image base64 URLs, or raw base64 image data. Save the result on the server. To save into a caller workspace, pass an absolute output_path. The response saved_path is the actual absolute file path written by the server; image_data_base64 is also returned as a fallback."),
+		mcp.WithDescription("Generate an image from a prompt, optional reference image, optional solid background color, optional tuning args, seed, negative prompt, and output_path. Reference images may be http(s) URLs via reference_image or absolute local file paths via reference_path. Save the result on the server. To save into a caller workspace, pass an absolute output_path. The response saved_path is the actual absolute file path written by the server."),
 		mcp.WithInputSchema[GenerateImageArgs](),
 	)
 }

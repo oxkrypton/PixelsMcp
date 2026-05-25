@@ -166,6 +166,11 @@ func (s *Service) GenerateSpriteSheet(ctx context.Context, opts SpriteSheetOptio
 }
 
 func (s *Service) generate(ctx context.Context, prompt string, fileNamePrefix string, generation GenerationOptions) (*Result, error) {
+	generation, err := prepareReferenceInput(generation)
+	if err != nil {
+		return nil, err
+	}
+
 	generated, err := s.provider.Generate(ctx, prompt, generation)
 	if err != nil {
 		return nil, err
